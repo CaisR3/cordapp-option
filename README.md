@@ -1,6 +1,6 @@
 ![Corda](https://www.corda.net/wp-content/uploads/2016/11/fg005_corda_b.png)
 
-# Option CorDapp Version 1
+# Option CorDapp Version 2
 
 This repo contains a CorDapp representing an OTC Equity Option. The following features have been added:
 
