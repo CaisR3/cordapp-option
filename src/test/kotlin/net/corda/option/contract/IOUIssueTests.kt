@@ -79,32 +79,6 @@ class IOUIssueTests {
     }
 
     @Test
-    fun cannotCreateZeroValueIOUs() {
-        ledger {
-            transaction {
-                command(ALICE_PUBKEY, BOB_PUBKEY) { IOUContract.Commands.Issue() }
-                output { IOUState(0.POUNDS, ALICE, BOB) } // Zero amount fails.
-                this `fails with` "A newly issued IOU must have a positive amount."
-            }
-            transaction {
-                command(ALICE_PUBKEY, BOB_PUBKEY) { IOUContract.Commands.Issue() }
-                output { IOUState(100.SWISS_FRANCS, ALICE, BOB) }
-                this.verifies()
-            }
-            transaction {
-                command(ALICE_PUBKEY, BOB_PUBKEY) { IOUContract.Commands.Issue() }
-                output { IOUState(1.POUNDS, ALICE, BOB) }
-                this.verifies()
-            }
-            transaction {
-                command(ALICE_PUBKEY, BOB_PUBKEY) { IOUContract.Commands.Issue() }
-                output { IOUState(10.DOLLARS, ALICE, BOB) }
-                this.verifies()
-            }
-        }
-    }
-
-    @Test
     fun lenderAndBorrowerCannotBeTheSame() {
         val iou = IOUState(1.POUNDS, ALICE, BOB)
         val borrowerIsLenderIou = IOUState(10.POUNDS, ALICE, ALICE)

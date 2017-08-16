@@ -66,7 +66,7 @@ class OptionIssueFlowTests {
     }
 
     @Test
-    fun issueFlowReturnsVerifiedPartiallySignedTransaction() {
+    fun issueFlowFailsWhenZeroStrikeProvided() {
         // Check that a zero strike Option fails.
         val zeroStrikeOption = getBadOption(a,b)
         val futureOne = a.services.startFlow(OptionIssueFlow.Initiator(zeroStrikeOption)).resultFuture
