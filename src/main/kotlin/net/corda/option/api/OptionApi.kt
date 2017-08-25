@@ -159,7 +159,7 @@ class OptionApi(val services: CordaRPCOps) {
             val flowHandle = services.startTrackedFlowDynamic(OptionRequestFlow.Initiator::class.java, state)
             val result = flowHandle.use { it.returnValue.getOrThrow() }
             // Return the response.
-            Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.single()}"
+            Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.first()} and \n${result.tx.outputs.last()}"
         } catch (e: Exception) {
             // For the purposes of this demo app, we do not differentiate by exception type.
             Response.Status.BAD_REQUEST to e.message

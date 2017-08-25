@@ -19,6 +19,8 @@ import kotlin.test.assertFailsWith
 import net.corda.core.node.services.ServiceInfo
 import net.corda.option.oracle.service.Oracle
 import net.corda.option.oracle.flow.*
+import net.corda.option.api.OptionApi
+import net.corda.node.internal.CordaRPCOpsImpl
 
 class OptionIssueFlowTests {
     lateinit var net: MockNetwork
