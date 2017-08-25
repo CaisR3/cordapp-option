@@ -20,29 +20,6 @@ class IOUTransferTests {
     class DummyCommand : CommandData
 
     @Test
-    fun mustHandleMultipleCommandValues() {
-        val iou = IOUState(1.POUNDS, ALICE, BOB)
-        ledger {
-            transaction {
-                output { iou }
-                command(ALICE_PUBKEY, BOB_PUBKEY) { DummyCommand() }
-                this `fails with` "Required net.corda.option.contract.IOUContract.Commands command"
-            }
-            transaction {
-                output { iou }
-                command(ALICE_PUBKEY, BOB_PUBKEY) { IOUContract.Commands.Issue() }
-                this.verifies()
-            }
-            transaction {
-                input { iou }
-                output { iou.withNewLender(CHARLIE) }
-                command(ALICE_PUBKEY, BOB_PUBKEY, CHARLIE_PUBKEY) { IOUContract.Commands.Transfer() }
-                this.verifies()
-            }
-        }
-    }
-
-    @Test
     fun mustHaveOneInputAndOneOutput() {
         val iou = IOUState(1.POUNDS, ALICE, BOB)
         ledger {

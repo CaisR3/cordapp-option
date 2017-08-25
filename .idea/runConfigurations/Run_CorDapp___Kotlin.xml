@@ -8,8 +8,10 @@
     <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
     <option name="ALTERNATIVE_JRE_PATH" />
     <option name="PASS_PARENT_ENVS" value="true" />
-    <module name="option_main" />
+    <module name="cordapp-optionv2_main" />
     <envs />
-    <method />
+    <method>
+      <option name="Make" enabled="false" />
+    </method>
   </configuration>
 </component>

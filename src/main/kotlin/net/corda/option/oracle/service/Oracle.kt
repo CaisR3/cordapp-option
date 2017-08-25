@@ -15,6 +15,7 @@ import net.corda.option.contract.OptionContract
 import net.corda.option.datatypes.Spot
 import net.corda.option.datatypes.AttributeOf
 import net.corda.option.datatypes.Vol
+import org.apache.commons.io.IOUtils
 import java.io.File
 import java.time.Instant
 
@@ -47,13 +48,13 @@ class Oracle(val identity: Party, val services: ServiceHub) : SingletonSerialize
 
     // For now, load spots from file and parse into list
     fun loadSpots(): List<Spot> {
-        val loadedSpots = File("src\\main\\resources\\oracle\\example.spots.txt").readLines()
+        val loadedSpots = IOUtils.toString(Thread.currentThread().contextClassLoader.getResourceAsStream("oracle/example.spots.txt"), Charsets.UTF_8.name()).lines().filter { it != "" }
         return loadedSpots.map(this::parseSpot).toList()
     }
 
     // For now, load spots from file and parse into list
     fun loadVols(): List<Vol> {
-        val loadedVols = File("src\\main\\resources\\oracle\\example.vols.txt").readLines()
+        val loadedVols = IOUtils.toString(Thread.currentThread().contextClassLoader.getResourceAsStream("oracle/example.vols.txt"), Charsets.UTF_8.name()).lines().filter { it != "" }
         return loadedVols.map(this::parseVol).toList()
     }
 

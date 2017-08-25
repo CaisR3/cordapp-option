@@ -48,6 +48,7 @@ class OptionExerciseFlowTests {
         }
         // run node d as oracle
         d.registerInitiatedFlow(QuerySpotHandler::class.java)
+        d.registerInitiatedFlow(QueryVolHandler::class.java)
         d.registerInitiatedFlow(SignHandler::class.java)
         d.installCordaService(Oracle::class.java)
         net.runNetwork()

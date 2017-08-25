@@ -4,6 +4,7 @@ import co.paralleluniverse.fibers.Suspendable
 import net.corda.core.flows.FlowException
 import net.corda.core.flows.FlowLogic
 import net.corda.core.flows.InitiatedBy
+import net.corda.core.flows.InitiatingFlow
 import net.corda.core.identity.Party
 import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.unwrap
@@ -12,6 +13,7 @@ import net.corda.option.flow.QueryVol
 import net.corda.option.oracle.service.Oracle
 
 // The Service side flow to handle Oracle queries.
+@InitiatingFlow
 @InitiatedBy(QueryVol::class)
 class QueryVolHandler(val otherParty: Party) : FlowLogic<Unit>() {
     companion object {

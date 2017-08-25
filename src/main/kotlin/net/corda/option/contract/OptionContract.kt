@@ -1,5 +1,8 @@
 package net.corda.option.contract
 
+import net.corda.contracts.asset.sumCash
+import net.corda.contracts.asset.sumCashOrNull
+import net.corda.contracts.asset.sumCashOrZero
 import net.corda.option.pricing.BlackScholes
 import net.corda.core.contracts.*
 import net.corda.core.crypto.SecureHash
@@ -30,23 +33,23 @@ open class OptionContract : IOptionContract {
         val value = command.value
         when (value) {
             is Commands.Issue -> {
-                val output = tx.outputs.single() as OptionState
+                val output = tx.outputs.filter { it is OptionState } .single() as OptionState
                 val time = timeWindow?.untilTime ?: throw IllegalArgumentException("Issued options must be timestamped")
                 requireThat {
                     "the issue transaction is signed by the issuer" using (output.issuer.owningKey in command.signers)
                     "the issue transaction is signed by the owner" using (output.owner.owningKey in command.signers)
-                    "Zero input should be consumed when issuing an option." using (tx.inputs.isEmpty())
 
                     "The strike must be non-negative" using (output.strike.quantity > 0)
                     "the expiry date is not in the past" using (time < output.expiry)
 
-                    "The state is propagated" using (tx.outputs.size == 1)
+                    "The state is propagated" using (tx.outputs.size >= 1)
                 }
             }
 
             is Commands.Trade -> {
-                val input = tx.inputs.single() as OptionState
-                val output = tx.outputs.single() as OptionState
+                val input = tx.inputs.filter { it is OptionState }.single() as OptionState
+                val cash = tx.inputs.sumCashOrNull()
+                val output = tx.outputs.filter { it is OptionState }.single() as OptionState
 
                 requireThat {
                     "The trade is signed by the issuer of the option)" using (input.issuer.owningKey in command.signers)
@@ -59,13 +62,13 @@ open class OptionContract : IOptionContract {
                             && input.expiry == output.expiry && input.underlying == output.underlying)
                     "The owner property must change in a trade." using (input.owner != output.owner)
 
-                    "The state is propagated" using (tx.outputs.size == 1)
+                    "The state is propagated" using (tx.outputs.size >= 1)
                 }
             }
 
             is Commands.Exercise -> {
                 val input = tx.inputs.single() as OptionState
-                // We expect an IOU state as an output on exercising matching the moneyness
+                // We expect an IOU state as an output on exercising that matches the moneyness
                 val optionOutput = tx.outputs.filterIsInstance<OptionState>().single()
                 val iouOutput = tx.outputs.filterIsInstance<IOUState>().single()
                 val time = timeWindow?.fromTime ?: throw IllegalArgumentException("Exercising of the option must be timestamped")
@@ -75,7 +78,15 @@ open class OptionContract : IOptionContract {
                     "Exercising the option is executed before maturity" using (time <= input.expiry)
                     "The option is not already exercised" using (!input.exercised)
 
-                    "The IOU amount equals the strike minus the spot for a Put option" using (iouOutput.amount == calculateMoneyness(input.strike, value.spot.value, input.optionType))
+                    if(input.optionType == OptionType.CALL)
+                    {
+                        "The IOU amount equals the spot minus the strike for a Call option" using (iouOutput.amount == calculateMoneyness(input.strike, value.spot.value, input.optionType))
+                    }
+
+                    if(input.optionType == OptionType.PUT)
+                    {
+                        "The IOU amount equals the strike minus the spot for a Put option" using (iouOutput.amount == calculateMoneyness(input.strike, value.spot.value, input.optionType))
+                    }
 
                     "Exercising the option is signed by the current owner of the option" using (input.owner.owningKey in command.signers)
 
@@ -84,12 +95,6 @@ open class OptionContract : IOptionContract {
             }
 
             else -> throw IllegalArgumentException("Unrecognised command")
-        }
-
-        //general constraints on the shape of the transaction.
-        requireThat {
-            //Constraints on the signers.
-            //"All of the participants must be signers." using (command.signers.toSet() == output.participants.map { it.owningKey }.toSet())
         }
     }
 
@@ -101,7 +106,7 @@ open class OptionContract : IOptionContract {
 
     override fun calculateMoneyness(strike: Amount<Currency>, spot: Amount<Currency>, optionType: OptionType): Amount<Currency> {
         val zeroAmount = Amount.zero(spot.token)
-        if(optionType.name.equals("CALL"))
+        if(optionType == OptionType.CALL)
         {
             if(strike >= spot)
             {
@@ -118,8 +123,12 @@ open class OptionContract : IOptionContract {
 
     override fun calculatePremium(optionState: OptionState, volatility: Double): Double {
         // assume risk free rate of 1%
-        return BlackScholes(optionState.spot.quantity.toDouble(), optionState.strike.quantity.toDouble(), GlobalVar().riskFreeRate, 100.toDouble(), volatility)
-                .BSCall()
+        val blackScholes = BlackScholes(optionState.spot.quantity.toDouble(), optionState.strike.quantity.toDouble(), GlobalVar().riskFreeRate, 100.toDouble(), volatility)
+        if (optionState.optionType == OptionType.CALL)
+        {
+            return blackScholes.BSCall()
+        }
+        return blackScholes.BSPut()
     }
 
     fun generateIssue(strike: Amount<Currency>,

@@ -19,6 +19,7 @@ import net.corda.testing.node.MockServices
 import net.corda.testing.node.makeTestDataSourceProperties
 import net.corda.option.oracle.service.Oracle
 import net.corda.option.state.OptionState
+import org.apache.commons.io.IOUtils
 import org.jetbrains.exposed.sql.Database
 import org.junit.After
 import org.junit.Before

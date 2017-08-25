@@ -1,5 +1,6 @@
 package com.option
 
+import net.corda.core.contracts.DOLLARS
 import net.corda.core.contracts.TransactionVerificationException
 import net.corda.core.getOrThrow
 import net.corda.core.transactions.SignedTransaction
@@ -15,12 +16,16 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import net.corda.core.node.services.ServiceInfo
+import net.corda.option.oracle.service.Oracle
+import net.corda.option.oracle.flow.*
 
 class OptionIssueFlowTests {
     lateinit var net: MockNetwork
     lateinit var a: MockNetwork.MockNode
     lateinit var b: MockNetwork.MockNode
     lateinit var c: MockNetwork.MockNode
+    lateinit var d: MockNetwork.MockNode
 
     @Before
     fun setup() {
@@ -29,15 +34,20 @@ class OptionIssueFlowTests {
         a = nodes.partyNodes[0]
         b = nodes.partyNodes[1]
         c = nodes.partyNodes[2]
+        d = net.createNode(nodes.mapNode.info.address, advertisedServices = ServiceInfo(Oracle.type))
+        d.installCordaService(Oracle::class.java)
+
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)
-        }
-        nodes.partyNodes.forEach {
+            it.registerInitiatedFlow(OptionRequestFlow.Responder::class.java)
             it.registerInitiatedFlow(OptionTradeFlow.Responder::class.java)
-        }
-        nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionExerciseFlow.Responder::class.java)
         }
+        d.registerInitiatedFlow(QuerySpotHandler::class.java)
+        d.registerInitiatedFlow(QueryVolHandler::class.java)
+        d.registerInitiatedFlow(SignHandler::class.java)
+        d.installCordaService(Oracle::class.java)
+
         net.runNetwork()
     }
 
@@ -62,6 +72,23 @@ class OptionIssueFlowTests {
         val command = ptx.tx.commands.single()
         assert(command.value is OptionContract.Commands.Issue)
         assert(command.signers.toSet() == option.participants.map { it.owningKey }.toSet())
+        ptx.verifySignatures(b.info.legalIdentity.owningKey, DUMMY_NOTARY.owningKey)
+    }
+
+    @Test
+    fun requestFlowReturnsCorrectlyFormedPartiallySignedTransaction() {
+        val cashFlow = SelfIssueCashFlow(100.DOLLARS)
+        a.services.startFlow(cashFlow).resultFuture.getOrThrow()
+        val option = getOption(a,b)
+        val flow = OptionRequestFlow.Initiator(option)
+        val future = a.services.startFlow(flow).resultFuture
+        net.runNetwork()
+        val ptx: SignedTransaction = future.getOrThrow()
+        // Print the transaction for debugging purposes.
+        println(ptx.tx)
+        val commands = ptx.tx.commands
+        assert(commands.last().value is OptionContract.Commands.Issue)
+        assert(commands.last().signers.toSet() == option.participants.map { it.owningKey }.toSet())
         ptx.verifySignatures(b.info.legalIdentity.owningKey, DUMMY_NOTARY.owningKey)
     }
 
