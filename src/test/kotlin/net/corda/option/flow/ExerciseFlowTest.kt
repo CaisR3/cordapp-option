@@ -1,22 +1,22 @@
-package com.option.flow
+package net.corda.option.flow
 
-import net.corda.contracts.asset.Cash
 import net.corda.core.contracts.Amount
-import net.corda.core.contracts.DOLLARS
 import net.corda.core.contracts.requireSingleCommand
-import net.corda.core.getOrThrow
-import net.corda.core.node.services.ServiceInfo
 import net.corda.core.transactions.SignedTransaction
-import net.corda.core.utilities.DUMMY_NOTARY
+import net.corda.core.utilities.getOrThrow
+import net.corda.finance.DOLLARS
+import net.corda.finance.contracts.asset.Cash
+import net.corda.node.internal.StartedNode
+import net.corda.option.ORACLE_NAME
 import net.corda.option.contract.OptionContract
-import net.corda.option.state.IOUState
-import net.corda.testing.node.MockNetwork
+import net.corda.option.datatypes.AttributeOf
+import net.corda.option.datatypes.Spot
 import net.corda.option.getOption
-import net.corda.option.oracle.service.Oracle
-import net.corda.option.flow.*
-import net.corda.option.oracle.flow.*
-import net.corda.option.datatypes.*
+import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
+import net.corda.testing.DUMMY_NOTARY
+import net.corda.testing.node.MockNetwork
+import net.corda.testing.node.MockNetwork.MockNode
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -26,44 +26,36 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class OptionExerciseFlowTests {
-    lateinit var net: MockNetwork
-    lateinit var a: MockNetwork.MockNode
-    lateinit var b: MockNetwork.MockNode
-    lateinit var c: MockNetwork.MockNode
-    lateinit var d: MockNetwork.MockNode
+    val mockNet: MockNetwork = MockNetwork()
+    lateinit var a: StartedNode<MockNode>
+    lateinit var b: StartedNode<MockNode>
 
     @Before
     fun setup() {
-        net = MockNetwork()
-        val nodes = net.createSomeNodes(3)
+        val nodes = mockNet.createSomeNodes(2)
         a = nodes.partyNodes[0]
         b = nodes.partyNodes[1]
-        c = nodes.partyNodes[2]
-        d = net.createNode(nodes.mapNode.info.address, advertisedServices = ServiceInfo(Oracle.type))
+
+        val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
+        oracle.internals.installCordaService(net.corda.option.oracle.service.Oracle::class.java)
 
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)
             it.registerInitiatedFlow(OptionTradeFlow.Responder::class.java)
-            it.registerInitiatedFlow(OptionExerciseFlow.Responder::class.java)
         }
-        // run node d as oracle
-        d.registerInitiatedFlow(QuerySpotHandler::class.java)
-        d.registerInitiatedFlow(QueryVolHandler::class.java)
-        d.registerInitiatedFlow(SignHandler::class.java)
-        d.installCordaService(Oracle::class.java)
-        net.runNetwork()
+        mockNet.runNetwork()
     }
 
     @After
     fun tearDown() {
-        net.stopNodes()
+        mockNet.stopNodes()
     }
 
     private fun issueOption(): SignedTransaction {
         val option = getOption(a, b)
         val flow = OptionIssueFlow.Initiator(option)
         val future = a.services.startFlow(flow).resultFuture
-        net.runNetwork()
+        mockNet.runNetwork()
         return future.getOrThrow()
     }
 
@@ -73,7 +65,7 @@ class OptionExerciseFlowTests {
     private fun issueCash(amount: Amount<Currency>): Cash.State {
         val flow = SelfIssueCashFlow(amount)
         val future = a.services.startFlow(flow).resultFuture
-        net.runNetwork()
+        mockNet.runNetwork()
         return future.getOrThrow()
     }
 
@@ -89,7 +81,7 @@ class OptionExerciseFlowTests {
         val inputOption = stx.tx.outputs.single().data as OptionState
         val flow = OptionExerciseFlow.Initiator(option.linearId)
         val future = b.services.startFlow(flow).resultFuture
-        net.runNetwork()
+        mockNet.runNetwork()
         val exerciseResult = future.getOrThrow()
         // Check the transaction is well formed...
         val ledgerTx = exerciseResult.toLedgerTransaction(a.services)
@@ -106,14 +98,14 @@ class OptionExerciseFlowTests {
         val command = ledgerTx.commands.requireSingleCommand<OptionContract.Commands>().value as OptionContract.Commands.Exercise
         assert(command.spot == OptionContract.Commands.Exercise(spot).spot)
         // Check the transaction has been signed by the borrower.
-        exerciseResult.verifySignatures(b.info.legalIdentity.owningKey, DUMMY_NOTARY.owningKey)
+        exerciseResult.verifySignaturesExcept(b.info.legalIdentities.first().owningKey, DUMMY_NOTARY.owningKey)
     }
 
     @Test
     fun exerciseFlowCanOnlyBeRunByOwner() {
         val flow = OptionExerciseFlow.Initiator(getOption(a, b).linearId)
         val future = a.services.startFlow(flow).resultFuture
-        net.runNetwork()
+        mockNet.runNetwork()
         assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
 }

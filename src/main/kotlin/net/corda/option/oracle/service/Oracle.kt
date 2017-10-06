@@ -1,50 +1,34 @@
 package net.corda.option.oracle.service
 
 import net.corda.core.contracts.Command
-import net.corda.core.contracts.DOLLARS
-import net.corda.core.crypto.DigitalSignature
-import net.corda.core.crypto.MerkleTreeException
-import net.corda.core.identity.Party
-import net.corda.core.node.PluginServiceHub
+import net.corda.core.crypto.TransactionSignature
 import net.corda.core.node.ServiceHub
 import net.corda.core.node.services.CordaService
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.transactions.FilteredTransaction
-import net.corda.core.node.services.ServiceType
+import net.corda.finance.DOLLARS
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.Spot
 import net.corda.option.datatypes.AttributeOf
+import net.corda.option.datatypes.Spot
 import net.corda.option.datatypes.Vol
 import org.apache.commons.io.IOUtils
-import java.io.File
 import java.time.Instant
 
 // We sub-class 'SingletonSerializeAsToken' to ensure that instances of this class are never serialised by Kryo.
 // When a flow is check-pointed, the annotated @Suspendable methods and any object referenced from within those
 // annotated methods are serialised onto the stack. Kryo, the reflection based serialisation framework we use, crawls
 // the object graph and serialises anything it encounters, producing a graph of serialised objects.
-// This can cause some issues, for example: we do not want to serialise large objects on to the stack or objects which
-// may reference databases or other external services (which cannot be serialised!), therefore we mark certain objects
-// with tokens. When Kryo encounters one of these tokens, it doesn't serialise the object, instead, it makes a
-// reference to the type of the object. When flows are de-serialised, the token is used to connect up the object reference
-// to an instance which should already exist on the stack.
+// This can cause issues. For example, we do not want to serialise large objects on to the stack or objects which may
+// reference databases or other external services (which cannot be serialised!). Therefore we mark certain objects with
+// tokens. When Kryo encounters one of these tokens, it doesn't serialise the object. Instead, it creates a
+// reference to the type of the object. When flows are de-serialised, the token is used to connect up the object
+// reference to an instance which should already exist on the stack.
 @CordaService
-class Oracle(val identity: Party, val services: ServiceHub) : SingletonSerializeAsToken() {
-    // @CordaService requires us to have a constructor that takes in a single parameter of type PluginServiceHub.
-    // This is used by the node to automatically install the Oracle.
-    // We use the primary constructor for testing.
-    constructor(services: PluginServiceHub) : this(services.myInfo.serviceIdentities(type).first(), services)
+class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
+    private val myKey = services.myInfo.legalIdentities.first().owningKey
 
-    companion object {
-        // We need a public static ServiceType field named "type". This will allow the node to check if it's declared
-        // in the advertisedServices config and only attempt to load the Oracle if it is.
-        @JvmField
-        val type = ServiceType.getServiceType("net.corda.option", "stocks_oracle")
-    }
-
-    //private val spots: List<Spot> = parseFile(IOUtils.toString(Thread.currentThread().contextClassLoader.getResourceAsStream("example.spots.txt"), Charsets.UTF_8.name()))
-    private val spots: List<Spot> = loadSpots()
-    private val vols: List<Vol> = loadVols()
+    private val spots = loadSpots()
+    private val vols = loadVols()
 
     // For now, load spots from file and parse into list
     fun loadSpots(): List<Spot> {
@@ -100,43 +84,34 @@ class Oracle(val identity: Party, val services: ServiceHub) : SingletonSerialize
         return vols.filter { it.of == attributeOf }.single()
     }
 
-
-    // Signs over a transaction if the specified spot for a particular stock is correct.
-    // This function takes a filtered transaction which is a partial Merkle tree. Parts of the transaction which
-    // the Oracle doesn't need to see to opine over the correctness of the spot have been removed. If the spot is correct then the Oracle signs over
-    // the Merkle root (the hash) of the transaction.
-    fun sign(ftx: FilteredTransaction): DigitalSignature.LegallyIdentifiable {
+    // Signs over a transaction if the specified Nth prime for a particular N is correct.
+    // This function takes a filtered transaction which is a partial Merkle tree. Any parts of the transaction which
+    // the oracle doesn't need to see in order to verify the correctness of the nth prime have been removed. In this
+    // case, all but the [PrimeContract.Create] commands have been removed. If the Nth prime is correct then the oracle
+    // signs over the Merkle root (the hash) of the transaction.
+    fun sign(ftx: FilteredTransaction): TransactionSignature {
         // Check the partial Merkle tree is valid.
-        if (!ftx.verify()) throw MerkleTreeException("Couldn't verify partial Merkle tree.")
+        ftx.verify()
 
-        fun commandValidator(elem: Command): Boolean {
-            // This Oracle only cares about commands which have its public key in the signers list.
-            // This Oracle also only cares about OptionContract.Exercise commands.
-            // Of course, some of these constraints can be easily amended. E.g. they Oracle can sign over multiple
-            // command types.
-            if (!(identity.owningKey in elem.signers && elem.value is OptionContract.Commands.Exercise))
-                throw IllegalArgumentException("Oracle received unknown command (not in signers or not Spot).")
-            val exerciseCommand = elem.value as OptionContract.Commands.Exercise
+        val isValid = ftx.checkWithFun {
+            when (it) {
+                is Command<*> -> {
+                    if (it.value is OptionContract.Commands.Exercise) {
+                        val cmdData = it.value as OptionContract.Commands.Exercise
+                        myKey in it.signers && querySpot(cmdData.spot.of) == cmdData.spot
+                    } else {
+                        false
+                    }
+                }
 
-            // This is where the check the spot value is correct
-            return querySpot(exerciseCommand.spot.of) == exerciseCommand.spot
-        }
-
-        // This function is run for each non-hash leaf of the Merkle tree.
-        // We only expect to see commands.
-        fun check(elem: Any): Boolean {
-            return when (elem) {
-                is Command -> commandValidator(elem)
-                else -> throw IllegalArgumentException("Oracle received data of different type than expected.")
+                else -> throw IllegalArgumentException("Oracle received data of a different type than expected.")
             }
         }
 
-        // Validate the commands.
-        val leaves = ftx.filteredLeaves
-        if (!leaves.checkWithFun(::check)) throw IllegalArgumentException()
-
-        // Sign over the Merkle root and return the digital signature.
-        val signature = services.keyManagementService.sign(ftx.rootHash.bytes, identity.owningKey)
-        return DigitalSignature.LegallyIdentifiable(identity, signature.bytes)
+        if (isValid) {
+            return services.createSignature(ftx, myKey)
+        } else {
+            throw IllegalArgumentException("Oracle signature requested over invalid transaction.")
+        }
     }
 }

@@ -1,92 +1,76 @@
 package net.corda.option.flow
 
 import co.paralleluniverse.fibers.Suspendable
-import net.corda.core.contracts.Amount
 import net.corda.core.contracts.Command
-import net.corda.core.contracts.TransactionType
-import net.corda.core.flows.FlowLogic
-import net.corda.core.flows.InitiatedBy
-import net.corda.core.flows.InitiatingFlow
-import net.corda.core.flows.StartableByRPC
+import net.corda.core.flows.*
 import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
+import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
-import net.corda.flows.CollectSignaturesFlow
-import net.corda.flows.FinalityFlow
-import net.corda.flows.SignTransactionFlow
 import net.corda.option.contract.OptionContract
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
 import java.time.Duration
 import java.time.Instant
-import java.util.*
 
 object OptionIssueFlow {
 
     @InitiatingFlow
     @StartableByRPC
     class Initiator(val state: OptionState) : FlowLogic<SignedTransaction>() {
-        constructor(strike: Amount<Currency>,
-                    expiryDate: Instant, underlying: String,
-                    currency: Currency,
-                    issuer: Party,
-                    owner: Party,
-                    optionType: OptionType) : this(OptionState(strike, expiryDate, underlying, currency, issuer, owner, optionType))
 
         companion object {
-            object BUILDING : ProgressTracker.Step("Building and verifying transaction.")
-            object SIGNING : ProgressTracker.Step("signing transaction.")
-            object COLLECTING : ProgressTracker.Step("Collecting counterparty signature.") {
+            object SET_UP : ProgressTracker.Step("Initialising flow.")
+            object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
+            object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
+            object WE_SIGN : ProgressTracker.Step("Signing transaction.")
+            object OTHERS_SIGN : ProgressTracker.Step("Collecting counterparty signatures.") {
                 override fun childProgressTracker() = CollectSignaturesFlow.tracker()
             }
-
             object FINALISING : ProgressTracker.Step("Finalising transaction") {
                 override fun childProgressTracker() = FinalityFlow.tracker()
             }
 
-            fun tracker() = ProgressTracker(BUILDING, SIGNING, COLLECTING, FINALISING)
+            fun tracker() = ProgressTracker(SET_UP, BUILDING_THE_TX, VERIFYING_THE_TX, WE_SIGN, OTHERS_SIGN, FINALISING)
         }
 
         override val progressTracker: ProgressTracker = Initiator.tracker()
 
         @Suspendable
         override fun call(): SignedTransaction {
-            progressTracker.currentStep = BUILDING
-            // Step 1. Get a reference to the notary service on our network and our key pair.
-            val notary = serviceHub.networkMapCache.notaryNodes.single().notaryIdentity
+            progressTracker.currentStep = SET_UP
+            val notary = serviceHub.firstNotary()
 
-            // Step 2. Create a new issue command.
-            // Remember that a command is a CommandData object and a list of CompositeKeys
+            progressTracker.currentStep = BUILDING_THE_TX
             val issueCommand = Command(OptionContract.Commands.Issue(), state.participants.map { it.owningKey })
 
-            // Step 3. Create a new TransactionBuilder object.
-            val builder = TransactionType.General.Builder(notary)
-            builder.addTimeWindow(Instant.now(), Duration.ofSeconds(60))
+            val builder = TransactionBuilder(notary)
+                    .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+                    .addOutputState(state, OptionContract.OPTION_CONTRACT_ID)
+                    .addCommand(issueCommand)
 
-            // Step 4. Add the option as an output state, as well as a command to the transaction builder.
-            builder.withItems(state, issueCommand)
+            progressTracker.currentStep = VERIFYING_THE_TX
+            builder.verify(serviceHub)
 
-            // Step 5. Verify and sign it with our KeyPair.
-            builder.toWireTransaction().toLedgerTransaction(serviceHub).verify()
-            progressTracker.currentStep = SIGNING
+            progressTracker.currentStep = WE_SIGN
             val ptx = serviceHub.signInitialTransaction(builder)
 
             // Step 6. Collect the other party's signature using the SignTransactionFlow.
-            progressTracker.currentStep = COLLECTING
-            val stx = subFlow(CollectSignaturesFlow(ptx, COLLECTING.childProgressTracker()))
+            progressTracker.currentStep = OTHERS_SIGN
+            val counterparties = state.participants.filter { it != ourIdentity }
+            val counterpartySessions = counterparties.map { initiateFlow(it as Party) }
+            val stx = subFlow(CollectSignaturesFlow(ptx, counterpartySessions, OTHERS_SIGN.childProgressTracker()))
 
-            // Step 7. Assuming no exceptions, we can now finalise the transaction.
             progressTracker.currentStep = FINALISING
-            return subFlow(FinalityFlow(stx, FINALISING.childProgressTracker())).single()
+            return subFlow(FinalityFlow(stx, FINALISING.childProgressTracker()))
         }
     }
 
     @InitiatingFlow
     @InitiatedBy(OptionIssueFlow.Initiator::class)
-    class Responder(val otherParty: Party) : FlowLogic<SignedTransaction>() {
+    class Responder(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
         @Suspendable
         override fun call(): SignedTransaction {
-            val flow = object : SignTransactionFlow(otherParty) {
+            val flow = object : SignTransactionFlow(counterpartySession) {
                 @Suspendable
                 override fun checkTransaction(stx: SignedTransaction) {
                     // TODO: Add some checking.

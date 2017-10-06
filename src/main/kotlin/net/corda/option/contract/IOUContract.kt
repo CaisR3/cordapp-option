@@ -1,11 +1,10 @@
 package net.corda.option.contract
 
-import net.corda.contracts.asset.Cash
-import net.corda.contracts.asset.sumCash
 import net.corda.core.contracts.*
 import net.corda.core.contracts.Requirements.using
-import net.corda.core.contracts.TransactionForContract.InOutGroup
-import net.corda.core.crypto.SecureHash
+import net.corda.core.transactions.LedgerTransaction
+import net.corda.finance.contracts.asset.Cash
+import net.corda.finance.utils.sumCash
 import net.corda.option.state.IOUState
 
 /**
@@ -15,10 +14,10 @@ import net.corda.option.state.IOUState
  * - Settle. Fully or partially settling the [IOUState] using the Corda [Cash] contract.
  */
 class IOUContract : Contract {
-    /**
-     * Legal prose hash. This is just a dummy string for the time being.
-     */
-    override val legalContractReference: SecureHash = SecureHash.zeroHash
+    companion object {
+        @JvmStatic
+        val IOU_CONTRACT_ID = "net.corda.option.contract.IOUContract"
+    }
 
     /**
      * Add any commands required for this contract as classes within this interface.
@@ -35,13 +34,13 @@ class IOUContract : Contract {
      * The contract code for the [IOUContract].
      * The constraints are self documenting so don't require any additional explanation.
      */
-    override fun verify(tx: TransactionForContract): Unit {
+    override fun verify(tx: LedgerTransaction) {
         val command = tx.commands.requireSingleCommand<IOUContract.Commands>()
         when (command.value) {
             is Commands.Issue -> requireThat {
                 "Only one input from previous contract that IOU is based on" using (tx.inputs.size == 1)
                 "Two output states should be created when issuing an associated IOU." using (tx.outputs.size == 2)
-                val iou = tx.outputs.filterIsInstance<IOUState>().single()
+                val iou = tx.outputsOfType<IOUState>().single()
                 "A newly issued IOU must have a positive amount." using (iou.amount > Amount(0, iou.amount.token))
                 "The lender and borrower cannot be the same identity." using (iou.borrower != iou.lender)
                 "Only the beneficiary need sign this IOU" using
@@ -50,8 +49,8 @@ class IOUContract : Contract {
             is Commands.Transfer -> requireThat {
                 "An IOU transfer transaction should only consume one input state." using (tx.inputs.size == 1)
                 "An IOU transfer transaction should only create one output state." using (tx.outputs.size == 1)
-                val input = tx.inputs.single() as IOUState
-                val output = tx.outputs.single() as IOUState
+                val input = tx.inputsOfType<IOUState>().single()
+                val output = tx.outputsOfType<IOUState>().single()
                 "Only the lender property may change." using (input == output.withNewLender(input.lender))
                 "The lender property must change in a transfer." using (input.lender != output.lender)
                 "The borrower, old lender and new lender only must sign an IOU transfer transaction" using
@@ -60,7 +59,7 @@ class IOUContract : Contract {
             }
             is Commands.Settle -> {
                 // Check there is only one group of IOUs and that there is always an input IOU.
-                val ious: InOutGroup<IOUState, UniqueIdentifier> = tx.groupStates<IOUState, UniqueIdentifier> { it.linearId }.single()
+                val ious = tx.groupStates<IOUState, UniqueIdentifier> { it.linearId }.single()
                 require(ious.inputs.size == 1) { "There must be one input IOU." }
 
                 // Check there are output cash states.

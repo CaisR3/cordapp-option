@@ -1,11 +1,11 @@
 package net.corda.option.plugin
 
 import net.corda.core.messaging.CordaRPCOps
-import net.corda.core.node.CordaPluginRegistry
 import net.corda.option.api.OptionApi
+import net.corda.webserver.services.WebServerPluginRegistry
 import java.util.function.Function
 
-class OptionPlugin : CordaPluginRegistry() {
+class OptionPlugin : WebServerPluginRegistry {
     /**
      * A list of classes that expose web APIs.
      */

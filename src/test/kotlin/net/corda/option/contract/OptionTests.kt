@@ -1,19 +1,14 @@
 package com.option.contract
 
-import net.corda.contracts.asset.CASH
-import net.corda.contracts.asset.Cash
-import net.corda.contracts.asset.`issued by`
-import net.corda.contracts.asset.`owned by`
-import net.corda.core.contracts.DOLLARS
-import net.corda.core.contracts.POUNDS
-import net.corda.core.days
-import net.corda.core.utilities.ALICE
-import net.corda.core.utilities.BOB
-import net.corda.core.utilities.TEST_TX_TIME
+import net.corda.core.utilities.days
+import net.corda.finance.DOLLARS
+import net.corda.finance.contracts.asset.*
 import net.corda.option.contract.IOUContract
+import net.corda.option.contract.IOUContract.Companion.IOU_CONTRACT_ID
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.Spot
+import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.datatypes.AttributeOf
+import net.corda.option.datatypes.Spot
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
 import net.corda.option.types.OptionType
@@ -33,11 +28,11 @@ class OptionTransactionTests {
 
         ledger {
             unverifiedTransaction {
-                output("Mini Corp's $3", 3.DOLLARS.CASH `issued by` issuer `owned by` MINI_CORP)
+                output(CASH_PROGRAM_ID, "Mini Corp's $3", 3.DOLLARS.CASH `issued by` issuer `owned by` MINI_CORP)
             }
 
             transaction("Issuance") {
-                output("option") { option }
+                output(OPTION_CONTRACT_ID, "option") { option }
                 command(MEGA_CORP_PUBKEY) { OptionContract.Commands.Issue() }
                 this.timeWindow(TEST_TX_TIME)
                 this.verifies()
@@ -46,8 +41,8 @@ class OptionTransactionTests {
             transaction("Trade") {
                 input("option")
                 input("Mini Corp's $3")
-                output("cash of $3") { 3.DOLLARS.CASH `issued by` issuer `owned by` MEGA_CORP }
-                output("Mini Corp's option") { "option".output<OptionState>() `owned by` MINI_CORP }
+                output(CASH_PROGRAM_ID, "cash of $3") { 3.DOLLARS.CASH `issued by` issuer `owned by` MEGA_CORP }
+                output(OPTION_CONTRACT_ID, "Mi ni Corp's option") { "option".output<OptionState>() `owned by` MINI_CORP }
                 command(MINI_CORP_PUBKEY) { Cash.Commands.Move() }
                 command(MEGA_CORP_PUBKEY, MINI_CORP_PUBKEY) { OptionContract.Commands.Trade() }
                 this.verifies()
@@ -55,8 +50,8 @@ class OptionTransactionTests {
 
             transaction("Exercise") {
                 input("Mini Corp's option")
-                output("Mini Corp's exercised option") { "Mini Corp's option".output<OptionState>().exercise(5.DOLLARS) `owned by` MINI_CORP }
-                output(iou)
+                output(OPTION_CONTRACT_ID, "Mini Corp's exercised option") { "Mini Corp's option".output<OptionState>().exercise(5.DOLLARS) `owned by` MINI_CORP }
+                output(IOU_CONTRACT_ID, iou)
                 command(MINI_CORP_PUBKEY) { OptionContract.Commands.Exercise(spot) }
                 command(MINI_CORP_PUBKEY) { IOUContract.Commands.Issue()}
                 this.timeWindow(TEST_TX_TIME)

@@ -1,6 +1,5 @@
 package net.corda.option.pricing
 
-import org.apache.logging.log4j.core.pattern.AbstractStyleNameConverter
 import org.junit.Test
 import kotlin.test.assertEquals
 

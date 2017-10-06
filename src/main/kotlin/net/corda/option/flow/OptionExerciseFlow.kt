@@ -1,158 +1,106 @@
 package net.corda.option.flow
 
 import co.paralleluniverse.fibers.Suspendable
-
 import net.corda.core.contracts.Command
-import net.corda.core.contracts.TransactionType
 import net.corda.core.contracts.UniqueIdentifier
+import net.corda.core.flows.FinalityFlow
 import net.corda.core.flows.FlowLogic
-import net.corda.core.flows.InitiatedBy
 import net.corda.core.flows.InitiatingFlow
 import net.corda.core.flows.StartableByRPC
-import net.corda.core.identity.Party
-import net.corda.core.node.services.linearHeadsOfType
 import net.corda.core.transactions.SignedTransaction
+import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
-import net.corda.flows.CollectSignaturesFlow
-import net.corda.flows.FinalityFlow
-import net.corda.flows.SignTransactionFlow
-import net.corda.option.GlobalVar
+import net.corda.option.DEMO_INSTANT
+import net.corda.option.ORACLE_NAME
 import net.corda.option.contract.IOUContract
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.Spot
 import net.corda.option.datatypes.AttributeOf
-import net.corda.option.oracle.service.Oracle
+import net.corda.option.datatypes.Spot
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
 import java.time.Duration
 import java.time.Instant
+import java.util.function.Predicate
 
 object OptionExerciseFlow {
 
-    @InitiatingFlow     // This flow can be started by the node.
-    @StartableByRPC // Annotation to allow this flow to be started via RPC.
-    //allow time to be overridden for testing
+    @InitiatingFlow
+    @StartableByRPC
     class Initiator(val linearId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
-        // Progress tracker boilerplate.
         companion object {
-            object INITIALISING : ProgressTracker.Step("Initialising flow.")
-            object QUERYING : ProgressTracker.Step("Querying Oracle for an nth prime.")
-            object BUILDING_AND_VERIFYING : ProgressTracker.Step("Building and verifying transaction.")
-            object ORACLE_SIGNING : ProgressTracker.Step("Requesting Oracle signature.")
-            object SIGNING : ProgressTracker.Step("signing transaction.")
-            object COLLECTING : ProgressTracker.Step("Collecting counterparty signature.") {
-                override fun childProgressTracker() = CollectSignaturesFlow.tracker()
-            }
-
-            object FINALISING : ProgressTracker.Step("Finalising transaction") {
+            object SET_UP : ProgressTracker.Step("Initialising flow.")
+            object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the Nth prime.")
+            object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
+            object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
+            object WE_SIGN : ProgressTracker.Step("signing transaction.")
+            object ORACLE_SIGNS : ProgressTracker.Step("Requesting oracle signature.")
+            object FINALISING : ProgressTracker.Step("Finalising transaction.") {
                 override fun childProgressTracker() = FinalityFlow.tracker()
             }
 
-            fun tracker() = ProgressTracker(INITIALISING, QUERYING, BUILDING_AND_VERIFYING, ORACLE_SIGNING, SIGNING, FINALISING)
+            fun tracker() = ProgressTracker(SET_UP, QUERYING_THE_ORACLE, BUILDING_THE_TX,
+                    VERIFYING_THE_TX, WE_SIGN, ORACLE_SIGNS, FINALISING)
         }
-        override val progressTracker: ProgressTracker = Initiator.tracker()
+
+        override val progressTracker = tracker()
 
         @Suspendable
         override fun call(): SignedTransaction {
-            // Get references to all required parties.
-            progressTracker.currentStep = INITIALISING
-            val notary = serviceHub.networkMapCache.notaryNodes.single().notaryIdentity
-            // We get the oracle reference by using the ServiceType definition defined in the base CorDapp.
-            val oracle = serviceHub.networkMapCache.getNodesWithService(Oracle.type).single()
-            // **IMPORTANT:** Corda node services use their own key pairs, therefore we need to obtain the Party object for
-            // the Oracle service as opposed to the node RUNNING the Oracle service.
-            val oracleService = oracle.serviceIdentities(Oracle.type).single()
-            // The calling node's identity.
-            val me = serviceHub.myInfo.legalIdentity
+            progressTracker.currentStep = SET_UP
+            val notary = serviceHub.firstNotary()
+            // In Corda v1.0, we identify oracles we want to use by name.
+            val oracle = serviceHub.firstIdentityByName(ORACLE_NAME)
 
-            val states = serviceHub.vaultService.linearHeadsOfType<OptionState>()
-            val stateAndRef = states[linearId] ?: throw IllegalArgumentException("OptionState with linearId $linearId not found.")
+            val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
             val inputState = stateAndRef.state.data
 
-            // This flow can only be called by the current owner
-            require(inputState.owner == me) { "Option exercise flow must be initiated by the current owner"}
+            // This flow can only be called by the option's current owner.
+            require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner"}
 
-            // Query the Oracle to get specified spot.
-            progressTracker.currentStep = QUERYING
-            //TODO remove hardcoding
+            progressTracker.currentStep = QUERYING_THE_ORACLE
+            val spotOf = AttributeOf(inputState.underlying, DEMO_INSTANT)
+            val spot: Spot = subFlow(QuerySpot(oracle, spotOf))
 
-            //serviceHub.cordaService(NodeStocks.Oracle::class.java)
-
-            val spotOf = AttributeOf(inputState.underlying, GlobalVar().demoInstant)
-            val spot: Spot = subFlow(QuerySpot(oracleService, spotOf))
-
-            // Create a new transaction using the data from the Oracle.
-            progressTracker.currentStep = BUILDING_AND_VERIFYING
-
-            // Create output Option and IOU state
+            progressTracker.currentStep = BUILDING_THE_TX
             val outputOptionState = inputState.exercise(spot.value)
-            val profit = OptionContract().calculateMoneyness(outputOptionState.strike, outputOptionState.spot, outputOptionState.optionType)
-            //use same linear id to keep track of the fact this IOU is linked to the option
+            val profit = OptionContract.calculateMoneyness(outputOptionState.strike, outputOptionState.spot, outputOptionState.optionType)
+            // Use same linear id to keep track of the fact this IOU is linked to the option.
             val iouState = IOUState(profit, inputState.owner, inputState.issuer, linearId = inputState.linearId)
 
-            // Build our command.
-            // NOTE: The command requires the public key of the oracle, hence we need the signature from the oracle over
-            // this transaction.
-            val exerciseCommand = Command(OptionContract.Commands.Exercise(spot), listOf(oracleService.owningKey, inputState.owner.owningKey))
+            // By listing the oracle here, we make the oracle a required signer.
+            val exerciseCommand = Command(OptionContract.Commands.Exercise(spot), listOf(oracle.owningKey, inputState.owner.owningKey))
             val issueCommand = Command(IOUContract.Commands.Issue(), inputState.owner.owningKey)
 
             // Add the state and the command to the builder.
-            val builder = TransactionType.General.Builder(notary)
-            builder.addTimeWindow(Instant.now(), Duration.ofSeconds(60))
-            builder.withItems(stateAndRef, outputOptionState, iouState, exerciseCommand, issueCommand)
+            val builder = TransactionBuilder(notary)
+                    .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+                    .addInputState(stateAndRef)
+                    .addOutputState(outputOptionState, OptionContract.OPTION_CONTRACT_ID)
+                    .addOutputState(iouState, IOUContract.IOU_CONTRACT_ID)
+                    .addCommand(exerciseCommand)
+                    .addCommand(issueCommand)
 
-            // Verify the transaction.
-            builder.toWireTransaction().toLedgerTransaction(serviceHub).verify()
+            progressTracker.currentStep = VERIFYING_THE_TX
+            builder.verify(serviceHub)
 
-            // Build a filtered transaction for the Oracle to sign over.
-            // We only want to expose the exercise command if the specified Oracle is a signer.
-            val ftx = builder.toWireTransaction().buildFilteredTransaction ({
+            progressTracker.currentStep = WE_SIGN
+            val ptx = serviceHub.signInitialTransaction(builder)
+
+            progressTracker.currentStep = ORACLE_SIGNS
+            // For privacy reasons, we only want to expose to the oracle any commands of type
+            // `OptionContract.Commands.Exercise` that require its signature.
+            val ftx = ptx.buildFilteredTransaction(Predicate {
                 when (it) {
-                    is Command -> oracleService.owningKey in it.signers && it.value is OptionContract.Commands.Exercise
+                    is Command<*> -> oracle.owningKey in it.signers && it.value is OptionContract.Commands.Exercise
                     else -> false
                 }
             })
 
-            //(oracleService.owningKey in this .signers) // && it.value is OptionContract.Commands.Issue
+            val oracleSignature = subFlow(SignTx(oracle, ftx))
+            val stx = ptx.withAdditionalSignature(oracleSignature)
 
-            // Get a signature from the Oracle and add it to the transaction.
-            progressTracker.currentStep = ORACLE_SIGNING
-            // Get a signature from the Oracle over the Merkle root of the transaction.
-            val oracleSignature = subFlow(SignTx(oracle.legalIdentity, ftx))
-            // Append the oracle's signature to the transaction and convert the builder to a SignedTransaction.
-            // We use the 'checkSufficientSignatures = false' as we haven't collected all the signatures yet.
-            val ptx = builder.addSignatureUnchecked(oracleSignature).toSignedTransaction(checkSufficientSignatures = false)
-
-            // Add our signature.
-            progressTracker.currentStep = SIGNING
-            // Generate the signature then add it to the transaction.
-            val mySignature = serviceHub.createSignature(ptx, me.owningKey)
-            val stx = ptx + mySignature
-
-            // Finalise.
-            // We do this by calling finality flow. The transaction will be broadcast to all parties listed in 'participants'.
             progressTracker.currentStep = FINALISING
-            val result = subFlow(FinalityFlow(stx)).single()
-
-            return result
-        }
-    }
-
-    @InitiatingFlow
-    @InitiatedBy(OptionExerciseFlow.Initiator::class)
-    class Responder(val otherParty: Party) : FlowLogic<SignedTransaction>() {
-        @Suspendable
-        override fun call(): SignedTransaction {
-            val flow = object : SignTransactionFlow(otherParty) {
-                @Suspendable
-                override fun checkTransaction(stx: SignedTransaction) {
-                    // TODO: Add some checking.
-                }
-            }
-
-            val stx = subFlow(flow)
-
-            return waitForLedgerCommit(stx.id)
+            return subFlow(FinalityFlow(stx))
         }
     }
 }

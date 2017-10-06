@@ -1,10 +1,14 @@
 package net.corda.option.state
 
-import net.corda.core.contracts.*
+import net.corda.core.contracts.Amount
+import net.corda.core.contracts.LinearState
+import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.Party
-import net.corda.core.utilities.ALICE
-import net.corda.core.utilities.BOB
-import net.corda.core.utilities.CHARLIE
+import net.corda.finance.DOLLARS
+import net.corda.finance.POUNDS
+import net.corda.testing.ALICE
+import net.corda.testing.BOB
+import net.corda.testing.CHARLIE
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -70,12 +74,6 @@ class IOUStateTests {
         IOUState::class.java.getDeclaredField("linearId")
         // Is the paid field of the correct type?
         assertEquals(IOUState::class.java.getDeclaredField("linearId").type, UniqueIdentifier::class.java)
-    }
-
-    @Test
-    fun isRelevantMethodComplete() {
-        val iouState = IOUState(1.POUNDS, ALICE, BOB)
-        assert(iouState.isRelevant(setOf(ALICE.owningKey, BOB.owningKey)))
     }
 
     @Test

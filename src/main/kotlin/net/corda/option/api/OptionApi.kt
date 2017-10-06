@@ -1,17 +1,18 @@
 package net.corda.option.api
 
-import net.corda.client.rpc.notUsed
-import net.corda.contracts.asset.Cash
-import net.corda.core.contracts.*
-import net.corda.core.days
-import net.corda.core.getOrThrow
+import net.corda.core.contracts.Amount
+import net.corda.core.contracts.StateAndRef
+import net.corda.core.contracts.UniqueIdentifier
+import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
+import net.corda.core.messaging.vaultQueryBy
+import net.corda.core.utilities.days
+import net.corda.core.utilities.getOrThrow
+import net.corda.finance.contracts.asset.Cash
 import net.corda.option.flow.*
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
 import net.corda.option.types.OptionType
-import org.bouncycastle.asn1.x500.X500Name
-import rx.Observable
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -23,17 +24,16 @@ import javax.ws.rs.QueryParam
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response
 
-val SERVICE_NODE_NAMES = listOf(
-        X500Name("CN=Controller,O=R3,L=London,C=UK"),
-        X500Name("CN=NetworkMapService,O=R3,L=London,C=UK"))
+val SERVICE_NODE_NAME = CordaX500Name("Controller", "London", "GB")
 
 /**
  * This API is accessible from /api/option. The endpoint paths specified below are relative to it.
  * We've defined a bunch of endpoints to deal with options, IOUs, cash and the various operations you can perform with them.
  */
 @Path("option")
-class OptionApi(val services: CordaRPCOps) {
-    private val myLegalName = services.nodeIdentity().legalIdentity.name
+class OptionApi(val rpcOps: CordaRPCOps) {
+    private val me = rpcOps.nodeInfo().legalIdentities.first()
+    private val myLegalName = me.name
 
     /**
      * Returns the node's name.
@@ -50,12 +50,11 @@ class OptionApi(val services: CordaRPCOps) {
     @GET
     @Path("peers")
     @Produces(MediaType.APPLICATION_JSON)
-    fun getPeers(): Map<String, List<X500Name>> {
-        val (nodeInfo, nodeUpdates) = services.networkMapUpdates()
-        nodeUpdates.notUsed()
+    fun getPeers(): Map<String, List<CordaX500Name>> {
+        val nodeInfo = rpcOps.networkMapSnapshot()
         return mapOf("peers" to nodeInfo
-                .map { it.legalIdentity.name }
-                .filter { it != myLegalName && it !in SERVICE_NODE_NAMES })
+                .map { it.legalIdentities.first().name }
+                .filter { it !in listOf(myLegalName, SERVICE_NODE_NAME) })
     }
 
     /**
@@ -65,21 +64,16 @@ class OptionApi(val services: CordaRPCOps) {
     @Path("options")
     @Produces(MediaType.APPLICATION_JSON)
             // Filter by state type: Option.
-    fun getOptions(): List<StateAndRef<ContractState>> {
-        val result = services.vaultAndUpdates().justSnapshot.filter { it.state.data is OptionState }
-        return result
+    fun getOptions(): List<StateAndRef<OptionState>> {
+        return rpcOps.vaultQueryBy<OptionState>().states
     }
 
-    /**
-     * Displays all IOU states that exist in the node's vault.
-     */
     @GET
     @Path("ious")
     @Produces(MediaType.APPLICATION_JSON)
             // Filter by state type: Option.
-    fun getIOUs(): List<StateAndRef<ContractState>> {
-        val result = services.vaultAndUpdates().justSnapshot.filter { it.state.data is IOUState }
-        return result
+    fun getIOUs(): List<StateAndRef<IOUState>> {
+        return rpcOps.vaultQueryBy<IOUState>().states
     }
 
     /**
@@ -89,18 +83,9 @@ class OptionApi(val services: CordaRPCOps) {
     @Path("cash")
     @Produces(MediaType.APPLICATION_JSON)
             // Filter by state type: Cash.
-    fun getCash(): List<StateAndRef<ContractState>> {
-        return services.vaultAndUpdates().justSnapshot.filter { it.state.data is Cash.State }
+    fun getCash(): List<StateAndRef<Cash.State>> {
+        return rpcOps.vaultQueryBy<Cash.State>().states
     }
-
-    /**
-     * Displays all cash states that exist in the node's vault.
-     */
-    @GET
-    @Path("cash-balances")
-    @Produces(MediaType.APPLICATION_JSON)
-            // Display cash balances.
-    fun getCashBalances(): Map<Currency, Amount<Currency>> = services.getCashBalances()
 
     /**
      * Initiates a flow to agree an Option between two parties.
@@ -111,11 +96,10 @@ class OptionApi(val services: CordaRPCOps) {
                     @QueryParam(value = "currency") currency: String,
                     @QueryParam(value = "expiry") expiry: String,
                     @QueryParam(value = "underlying") underlying: String,
-                    @QueryParam(value = "counterparty") counterparty: String,
+                    @QueryParam(value = "counterparty") counterparty: CordaX500Name,
                     @QueryParam(value = "optionType") optionType: String): Response {
         // Get party objects for myself and the counterparty.
-        val me = services.nodeIdentity().legalIdentity
-        val party = services.partyFromX500Name(X500Name(counterparty)) ?: throw IllegalArgumentException("Unknown party name.")
+        val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
         val expiryInstant = LocalDate.parse(expiry).atStartOfDay().toInstant(ZoneOffset.UTC)
         val optType = if (optionType.equals("CALL")) OptionType.CALL else OptionType.PUT
         // Create a new Option state using the parameters given.
@@ -123,7 +107,7 @@ class OptionApi(val services: CordaRPCOps) {
 
         // Start the OptionIssueFlow. We block and wait for the flow to return.
         val (status, message) = try {
-            val flowHandle = services.startTrackedFlowDynamic(OptionIssueFlow.Initiator::class.java, state)
+            val flowHandle = rpcOps.startTrackedFlowDynamic(OptionIssueFlow.Initiator::class.java, state)
             val result = flowHandle.use { it.returnValue.getOrThrow() }
             // Return the response.
             Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.single()}"
@@ -141,14 +125,13 @@ class OptionApi(val services: CordaRPCOps) {
     @GET
     @Path("request-option")
     fun requestOption(@QueryParam(value = "strike") strike: Int,
-                    @QueryParam(value = "currency") currency: String,
-                    @QueryParam(value = "expiry") expiry: String,
-                    @QueryParam(value = "underlying") underlying: String,
-                    @QueryParam(value = "issuer") issuer: String,
-                    @QueryParam(value = "optionType") optionType: String): Response {
+                      @QueryParam(value = "currency") currency: String,
+                      @QueryParam(value = "expiry") expiry: String,
+                      @QueryParam(value = "underlying") underlying: String,
+                      @QueryParam(value = "issuer") issuer: CordaX500Name,
+                      @QueryParam(value = "optionType") optionType: String): Response {
         // Get party objects for myself and the issuer.
-        val me = services.nodeIdentity().legalIdentity
-        val party = services.partyFromX500Name(X500Name(issuer)) ?: throw IllegalArgumentException("Unknown party name.")
+        val party = rpcOps.wellKnownPartyFromX500Name(issuer) ?: throw IllegalArgumentException("Unknown party name.")
         val expiryInstant = LocalDate.parse(expiry).atStartOfDay().toInstant(ZoneOffset.UTC)
         val optType = if (optionType.equals("CALL")) OptionType.CALL else OptionType.PUT
         // Create a new Option state using the parameters given.
@@ -156,7 +139,7 @@ class OptionApi(val services: CordaRPCOps) {
 
         // Start the OptionIssueFlow. We block and wait for the flow to return.
         val (status, message) = try {
-            val flowHandle = services.startTrackedFlowDynamic(OptionRequestFlow.Initiator::class.java, state)
+            val flowHandle = rpcOps.startTrackedFlowDynamic(OptionRequestFlow.Initiator::class.java, state)
             val result = flowHandle.use { it.returnValue.getOrThrow() }
             // Return the response.
             Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.first()} and \n${result.tx.outputs.last()}"
@@ -178,17 +161,16 @@ class OptionApi(val services: CordaRPCOps) {
         val currency = "USD"
         val expiry = Instant.now() + 30.days
         val underlying = "IBM"
-        val counterparty = "CN=NodeB,O=NodeB,L=New York,C=US"
+        val counterparty = CordaX500Name("NodeB", "New York", "US")
         val optionType = OptionType.PUT
 
         // Get party objects for myself and the counterparty.
-        val me = services.nodeIdentity().legalIdentity
-        val party = services.partyFromX500Name(X500Name(counterparty)) ?: throw IllegalArgumentException("Unknown party name.")
+        val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
         // Create a new Option state using the parameters given.
         val state = OptionState(Amount(amount.toLong() * 100, Currency.getInstance(currency)), expiry, underlying, Currency.getInstance(currency), me, party, optionType)
         // Start the OptionIssueFlow. We block and waits for the flow to return.
         try {
-            val result = services.startFlowDynamic(OptionIssueFlow.Initiator::class.java, state).returnValue.get()
+            val result = rpcOps.startFlowDynamic(OptionIssueFlow.Initiator::class.java, state).returnValue.get()
             // Return the response.
             return Response
                     .status(Response.Status.CREATED)
@@ -204,17 +186,17 @@ class OptionApi(val services: CordaRPCOps) {
     }
 
     /**
-     * tranfers an Option specified by transaction id to a new party.
+     * Tranfers an Option specified by transaction id to a new party.
      */
     @GET
     @Path("trade-option")
     fun tradeOption(@QueryParam(value = "id") id: String,
-                    @QueryParam(value = "party") counterparty: String): Response {
+                    @QueryParam(value = "party") counterparty: CordaX500Name): Response {
         val linearId = UniqueIdentifier.fromString(id)
-        val party = services.partyFromX500Name(X500Name(counterparty)) ?: throw IllegalArgumentException("Unknown party name.")
+        val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
 
         val (status, message) = try {
-            val flowHandle = services.startTrackedFlowDynamic(OptionTradeFlow.Initiator::class.java, linearId, party)
+            val flowHandle = rpcOps.startTrackedFlowDynamic(OptionTradeFlow.Initiator::class.java, linearId, party)
             // We don't care about the signed tx returned by the flow, only that it finishes successfully
             flowHandle.use { flowHandle.returnValue.getOrThrow() }
             Response.Status.CREATED to "Option $id transferred to $party."
@@ -234,7 +216,7 @@ class OptionApi(val services: CordaRPCOps) {
         val linearId = UniqueIdentifier.fromString(id)
 
         val (status, message) = try {
-            val flowHandle = services.startTrackedFlowDynamic(OptionExerciseFlow.Initiator::class.java, linearId)
+            val flowHandle = rpcOps.startTrackedFlowDynamic(OptionExerciseFlow.Initiator::class.java, linearId)
             flowHandle.use { flowHandle.returnValue.getOrThrow() }
             Response.Status.CREATED to "option exercised."
         } catch (e: Exception) {
@@ -254,20 +236,13 @@ class OptionApi(val services: CordaRPCOps) {
         val issueAmount = Amount(amount.toLong() * 100, Currency.getInstance(currency))
 
         val (status, message) = try {
-            val flowHandle = services.startTrackedFlowDynamic(SelfIssueCashFlow::class.java, issueAmount)
-            val cashState = flowHandle.use { it.returnValue.getOrThrow() }
+            val flowHandle = rpcOps.startTrackedFlowDynamic(SelfIssueCashFlow::class.java, issueAmount)
+            val cashState = flowHandle.returnValue.getOrThrow()
             Response.Status.CREATED to cashState.toString()
         } catch (e: Exception) {
             Response.Status.BAD_REQUEST to e.message
         }
 
         return Response.status(status).entity(message).build()
-    }
-
-    // Helper method to get just the snapshot portion of an RPC call which also returns an Observable of updates. It's
-    // important to unsubscribe from this Observable if we're not going to use it as otherwise we leak resources on the server.
-    private val <A> Pair<A, Observable<*>>.justSnapshot: A get() {
-        second.notUsed()
-        return first
     }
 }
