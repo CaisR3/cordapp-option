@@ -1,4 +1,4 @@
-package net.corda.option.pricing
+package net.corda.option.pricingmodel
 
 //_________________________________________________________________________
 //

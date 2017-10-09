@@ -1,4 +1,4 @@
-package net.corda.option.flow
+package net.corda.option.flow.client
 
 import co.paralleluniverse.fibers.Suspendable
 import net.corda.core.contracts.Amount
@@ -19,24 +19,27 @@ import java.util.*
 @InitiatingFlow
 class SelfIssueCashFlow(val amount: Amount<Currency>) : FlowLogic<Cash.State>() {
 
-    override val progressTracker: ProgressTracker = SelfIssueCashFlow.tracker()
+    override val progressTracker = tracker()
 
     companion object {
-        object PREPARING : ProgressTracker.Step("Preparing to self issue cash.")
-        object ISSUING : ProgressTracker.Step("Issuing cash")
+        object PREPARING : ProgressTracker.Step("Gathering the required inputs.")
+        object ISSUING : ProgressTracker.Step("Issuing cash.")
+        object RETURNING : ProgressTracker.Step("Returning the newly-issued cash state.")
 
-        fun tracker() = ProgressTracker(PREPARING, ISSUING)
+        fun tracker() = ProgressTracker(PREPARING, ISSUING, RETURNING)
     }
 
     @Suspendable
     override fun call(): Cash.State {
-        /** Create the cash issue command. */
+        progressTracker.currentStep = PREPARING
         val issueRef = OpaqueBytes.of(0)
         val notary = serviceHub.firstNotary()
-        /** Create the cash issuance transaction. */
-        progressTracker.currentStep = PREPARING
-        val cashIssueTransaction = subFlow(CashIssueFlow(amount, issueRef, notary))
-        /** Return the cash output. */
-        return cashIssueTransaction.stx.tx.outputsOfType<Cash.State>().single()
+
+        progressTracker.currentStep = ISSUING
+        val cashIssueSubflowResult = subFlow(CashIssueFlow(amount, issueRef, notary))
+
+        progressTracker.currentStep = RETURNING
+        val cashIssueTx = cashIssueSubflowResult.stx.toLedgerTransaction(serviceHub)
+        return cashIssueTx.outputsOfType<Cash.State>().single()
     }
 }

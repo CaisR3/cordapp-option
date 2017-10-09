@@ -2,12 +2,12 @@ package net.corda.option.contract
 
 import net.corda.core.contracts.*
 import net.corda.core.transactions.LedgerTransaction
+import net.corda.option.OptionType
 import net.corda.option.RISK_FREE_RATE
-import net.corda.option.datatypes.Spot
-import net.corda.option.pricing.BlackScholes
+import net.corda.option.SpotPrice
+import net.corda.option.pricingmodel.BlackScholes
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
 import java.util.*
 
 open class OptionContract : Contract {
@@ -29,8 +29,8 @@ open class OptionContract : Contract {
         }
 
         fun calculatePremium(optionState: OptionState, volatility: Double): Double {
-            // assume risk free rate of 1%
-            val blackScholes = BlackScholes(optionState.spot.quantity.toDouble(), optionState.strike.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility)
+            // Assume risk free rate of 1%
+            val blackScholes = BlackScholes(optionState.spotPrice.quantity.toDouble(), optionState.strike.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility)
             if (optionState.optionType == OptionType.CALL)
             {
                 return blackScholes.BSCall()
@@ -75,7 +75,7 @@ open class OptionContract : Contract {
                     "The option cannot be traded if already exercised" using (!input.exercised)
 
                     "Only the owner property may change." using (input.strike == output.strike && input.issuer == output.issuer && input.currency == output.currency
-                            && input.expiry == output.expiry && input.underlying == output.underlying)
+                            && input.expiry == output.expiry && input.underlyingStock == output.underlyingStock)
                     "The owner property must change in a trade." using (input.owner != output.owner)
 
                     "The state is propagated" using (tx.outputs.isNotEmpty())
@@ -115,6 +115,6 @@ open class OptionContract : Contract {
     interface Commands : CommandData {
         class Issue : TypeOnlyCommandData(), Commands
         class Trade : TypeOnlyCommandData(), Commands
-        class Exercise(val spot: Spot) : Commands
+        class Exercise(val spot: SpotPrice) : Commands
     }
 }

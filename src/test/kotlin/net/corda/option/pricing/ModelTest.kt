@@ -1,5 +1,6 @@
 package net.corda.option.pricing
 
+import net.corda.option.pricingmodel.BlackScholes
 import org.junit.Test
 import kotlin.test.assertEquals
 
@@ -13,7 +14,7 @@ class ModelTest {
         val timeToExpiry = 0.40
         val volatility = 0.80
 
-        val premium = Math.round(BlackScholes(spot,strike,riskFreeRate,volatility,timeToExpiry).BSCall())
+        val premium = Math.round(BlackScholes(spot, strike, riskFreeRate, volatility, timeToExpiry).BSCall())
 
         assertEquals(89, premium)
     }
@@ -26,7 +27,7 @@ class ModelTest {
         val timeToExpiry = 0.60
         val volatility = 0.50
 
-        val premium = Math.round(BlackScholes(spot,strike,riskFreeRate,volatility,timeToExpiry).BSPut())
+        val premium = Math.round(BlackScholes(spot, strike, riskFreeRate, volatility, timeToExpiry).BSPut())
 
         assertEquals(28, premium)
     }
@@ -38,7 +39,7 @@ class ModelTest {
         val riskFreeRate = 0.01
         val timeToExpiry = 0.40
         val volatility = 0.2
-        val premium = Math.round(BlackScholes(spot,strike,riskFreeRate,volatility,timeToExpiry).BSCall())
+        val premium = Math.round(BlackScholes(spot, strike, riskFreeRate, volatility, timeToExpiry).BSCall())
         assertEquals(5, premium)
     }
 
@@ -49,7 +50,7 @@ class ModelTest {
         val riskFreeRate = 0.01
         val timeToExpiry = 0.20
         val volatility = 0.34
-        val premium = Math.round(BlackScholes(spot,strike,riskFreeRate,volatility,timeToExpiry).BSPut())
+        val premium = Math.round(BlackScholes(spot, strike, riskFreeRate, volatility, timeToExpiry).BSPut())
         assertEquals(50, premium)
     }
 }

@@ -1,17 +1,17 @@
-package com.option.contract
+package net.corda.option.contract
 
 import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
 import net.corda.finance.contracts.asset.*
+import net.corda.option.OptionType
+import net.corda.option.SpotPrice
+import net.corda.option.Stock
 import net.corda.option.contract.IOUContract
 import net.corda.option.contract.IOUContract.Companion.IOU_CONTRACT_ID
 import net.corda.option.contract.OptionContract
 import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
-import net.corda.option.datatypes.AttributeOf
-import net.corda.option.datatypes.Spot
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
 import net.corda.testing.*
 import org.junit.Test
 import java.util.*
@@ -24,7 +24,7 @@ class OptionTransactionTests {
         val option = getOption()
         val iou = IOUState(9.DOLLARS, MINI_CORP, MEGA_CORP)
         val spotValue = 1.DOLLARS
-        val spot = Spot(AttributeOf(option.underlying, TEST_TX_TIME), spotValue)
+        val spot = SpotPrice(Stock(option.underlyingStock, TEST_TX_TIME), spotValue)
 
         ledger {
             unverifiedTransaction {
@@ -64,7 +64,7 @@ class OptionTransactionTests {
             strike = 10.DOLLARS,
             expiry = TEST_TX_TIME + 30.days,
             currency = Currency.getInstance("USD"),
-            underlying = "IBM",
+            underlyingStock = "IBM",
             issuer = MEGA_CORP,
             owner = MEGA_CORP,
             optionType = OptionType.PUT

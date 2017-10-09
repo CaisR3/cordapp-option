@@ -1,17 +1,15 @@
 package net.corda.option.oracle
 
 import net.corda.core.contracts.Command
-import net.corda.core.transactions.FilteredTransaction
 import net.corda.core.transactions.TransactionBuilder
-import net.corda.core.transactions.WireTransaction
 import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
+import net.corda.option.OptionType
+import net.corda.option.SpotPrice
+import net.corda.option.Stock
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.AttributeOf
-import net.corda.option.datatypes.Spot
-import net.corda.option.oracle.service.Oracle
+import net.corda.option.service.Oracle
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
 import net.corda.testing.*
 import net.corda.testing.node.MockServices
 import org.junit.Test
@@ -25,7 +23,7 @@ import kotlin.test.assertNotEquals
 class OracleServiceTests {
     private val dummyServices = MockServices(listOf("net.corda.examples.oracle.base.contract"), CHARLIE_KEY)
     private val oracle = Oracle(dummyServices)
-    private val attributeOf = AttributeOf("IBM", Instant.parse("2017-07-03T10:15:30.00Z"))
+    private val attributeOf = Stock("IBM", Instant.parse("2017-07-03T10:15:30.00Z"))
 
     @Test
     fun `successful query`() {
@@ -42,7 +40,7 @@ class OracleServiceTests {
 
     @Test
     fun `successful sign`() {
-        val spot = Spot(attributeOf, 3.DOLLARS)
+        val spot = SpotPrice(attributeOf, 3.DOLLARS)
         val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
         val ftx = TransactionBuilder(DUMMY_NOTARY)
@@ -60,7 +58,7 @@ class OracleServiceTests {
 
     @Test
     fun `incorrect spot specified`() {
-        val spot = Spot(attributeOf, 20.DOLLARS)
+        val spot = SpotPrice(attributeOf, 20.DOLLARS)
         val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
         val ftx = TransactionBuilder(DUMMY_NOTARY)
@@ -80,7 +78,7 @@ class OracleServiceTests {
             strike = 10.DOLLARS,
             expiry = TEST_TX_TIME + 30.days,
             currency = Currency.getInstance("USD"),
-            underlying = "IBM",
+            underlyingStock = "IBM",
             issuer = MEGA_CORP,
             owner = MEGA_CORP,
             optionType = OptionType.PUT

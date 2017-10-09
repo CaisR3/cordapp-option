@@ -6,7 +6,6 @@ import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
 import net.corda.node.internal.StartedNode
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
 import net.corda.testing.node.MockNetwork.MockNode
 import java.time.Instant
 import java.util.*
@@ -15,7 +14,7 @@ fun getOption(issuer: Party, owner: Party): OptionState = OptionState(
         strike = 10.DOLLARS,
         expiry = Instant.now() + 30.days,
         currency = Currency.getInstance("USD"),
-        underlying = "IBM",
+        underlyingStock = "IBM",
         optionType = OptionType.PUT,
         issuer = issuer,
         owner = owner,
@@ -31,7 +30,7 @@ fun getBadOption(a: StartedNode<MockNode>, b: StartedNode<MockNode>) : OptionSta
         strike = 0.DOLLARS,
         expiry = Instant.now() + 30.days,
         currency = Currency.getInstance("USD"),
-        underlying = "IBM",
+        underlyingStock = "IBM",
         optionType = OptionType.PUT,
         issuer = a.info.legalIdentities.first(),
         owner = b.info.legalIdentities.first(),

@@ -8,9 +8,13 @@ import net.corda.finance.DOLLARS
 import net.corda.finance.contracts.asset.Cash
 import net.corda.node.internal.StartedNode
 import net.corda.option.ORACLE_NAME
+import net.corda.option.SpotPrice
+import net.corda.option.Stock
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.AttributeOf
-import net.corda.option.datatypes.Spot
+import net.corda.option.flow.client.OptionExerciseFlow
+import net.corda.option.flow.client.OptionIssueFlow
+import net.corda.option.flow.client.OptionTradeFlow
+import net.corda.option.flow.client.SelfIssueCashFlow
 import net.corda.option.getOption
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
@@ -37,7 +41,7 @@ class OptionExerciseFlowTests {
         b = nodes.partyNodes[1]
 
         val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
-        oracle.internals.installCordaService(net.corda.option.oracle.service.Oracle::class.java)
+        oracle.internals.installCordaService(net.corda.option.service.Oracle::class.java)
 
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)
@@ -76,7 +80,7 @@ class OptionExerciseFlowTests {
         val time = Instant.parse("2017-07-03T10:15:30.00Z")
         val option = getOption(a, b)
         val spotValue = 3.DOLLARS
-        val spot = Spot(AttributeOf(option.underlying, time), spotValue)
+        val spot = SpotPrice(Stock(option.underlyingStock, time), spotValue)
 
         val inputOption = stx.tx.outputs.single().data as OptionState
         val flow = OptionExerciseFlow.Initiator(option.linearId)

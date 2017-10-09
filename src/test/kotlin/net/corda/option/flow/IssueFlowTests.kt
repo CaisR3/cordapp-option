@@ -1,4 +1,4 @@
-package com.option
+package net.corda.option.flow
 
 import net.corda.core.contracts.TransactionVerificationException
 import net.corda.core.transactions.SignedTransaction
@@ -7,10 +7,10 @@ import net.corda.finance.DOLLARS
 import net.corda.node.internal.StartedNode
 import net.corda.option.ORACLE_NAME
 import net.corda.option.contract.OptionContract
-import net.corda.option.flow.OptionIssueFlow
-import net.corda.option.flow.OptionRequestFlow
-import net.corda.option.flow.OptionTradeFlow
-import net.corda.option.flow.SelfIssueCashFlow
+import net.corda.option.flow.client.OptionIssueFlow
+import net.corda.option.flow.client.OptionRequestFlow
+import net.corda.option.flow.client.OptionTradeFlow
+import net.corda.option.flow.client.SelfIssueCashFlow
 import net.corda.option.getBadOption
 import net.corda.option.getOption
 import net.corda.option.state.OptionState
@@ -34,7 +34,7 @@ class OptionIssueFlowTests {
         b = nodes.partyNodes[1]
 
         val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
-        oracle.internals.installCordaService(net.corda.option.oracle.service.Oracle::class.java)
+        oracle.internals.installCordaService(net.corda.option.service.Oracle::class.java)
 
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)

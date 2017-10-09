@@ -1,4 +1,4 @@
-package net.corda.option.flow
+package net.corda.option.flow.client
 
 import net.corda.core.contracts.ContractState
 import net.corda.core.contracts.StateAndRef

@@ -1,4 +1,4 @@
-package net.corda.option.flow
+package net.corda.option.flow.client
 
 import co.paralleluniverse.fibers.Suspendable
 import net.corda.core.contracts.Command
@@ -14,10 +14,9 @@ import net.corda.option.DEMO_INSTANT
 import net.corda.option.ORACLE_NAME
 import net.corda.option.contract.IOUContract
 import net.corda.option.contract.OptionContract
-import net.corda.option.datatypes.AttributeOf
-import net.corda.option.datatypes.Spot
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
+import net.corda.option.Stock
 import java.time.Duration
 import java.time.Instant
 import java.util.function.Predicate
@@ -29,6 +28,7 @@ object OptionExerciseFlow {
     class Initiator(val linearId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
         companion object {
             object SET_UP : ProgressTracker.Step("Initialising flow.")
+            object RETRIEVING_THE_INPUTS : ProgressTracker.Step("We retrieve the option to exercise from the vault.")
             object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the Nth prime.")
             object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
             object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
@@ -38,7 +38,7 @@ object OptionExerciseFlow {
                 override fun childProgressTracker() = FinalityFlow.tracker()
             }
 
-            fun tracker() = ProgressTracker(SET_UP, QUERYING_THE_ORACLE, BUILDING_THE_TX,
+            fun tracker() = ProgressTracker(SET_UP, QUERYING_THE_ORACLE, BUILDING_THE_TX, RETRIEVING_THE_INPUTS,
                     VERIFYING_THE_TX, WE_SIGN, ORACLE_SIGNS, FINALISING)
         }
 
@@ -54,16 +54,17 @@ object OptionExerciseFlow {
             val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
             val inputState = stateAndRef.state.data
 
+            progressTracker.currentStep = RETRIEVING_THE_INPUTS
             // This flow can only be called by the option's current owner.
             require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner"}
 
             progressTracker.currentStep = QUERYING_THE_ORACLE
-            val spotOf = AttributeOf(inputState.underlying, DEMO_INSTANT)
-            val spot: Spot = subFlow(QuerySpot(oracle, spotOf))
+            val spotOf = Stock(inputState.underlyingStock, DEMO_INSTANT)
+            val (spot, _) = subFlow(QueryOracle(oracle, spotOf))
 
             progressTracker.currentStep = BUILDING_THE_TX
             val outputOptionState = inputState.exercise(spot.value)
-            val profit = OptionContract.calculateMoneyness(outputOptionState.strike, outputOptionState.spot, outputOptionState.optionType)
+            val profit = OptionContract.calculateMoneyness(outputOptionState.strike, outputOptionState.spotPrice, outputOptionState.optionType)
             // Use same linear id to keep track of the fact this IOU is linked to the option.
             val iouState = IOUState(profit, inputState.owner, inputState.issuer, linearId = inputState.linearId)
 

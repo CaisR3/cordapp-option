@@ -12,7 +12,8 @@ import net.corda.finance.contracts.asset.Cash
 import net.corda.option.flow.*
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
-import net.corda.option.types.OptionType
+import net.corda.option.OptionType
+import net.corda.option.flow.client.*
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
