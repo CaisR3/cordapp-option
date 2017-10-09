@@ -3,15 +3,16 @@ package net.corda.option.flow.client
 import co.paralleluniverse.fibers.Suspendable
 import net.corda.core.contracts.Command
 import net.corda.core.flows.*
-import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import net.corda.option.contract.OptionContract
+import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.state.OptionState
 import java.time.Duration
 import java.time.Instant
 
+// TODO: Describe this flow.
 object OptionIssueFlow {
 
     @InitiatingFlow
@@ -45,7 +46,7 @@ object OptionIssueFlow {
 
             val builder = TransactionBuilder(notary)
                     .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
-                    .addOutputState(state, OptionContract.OPTION_CONTRACT_ID)
+                    .addOutputState(state, OPTION_CONTRACT_ID)
                     .addCommand(issueCommand)
 
             progressTracker.currentStep = VERIFYING_THE_TX

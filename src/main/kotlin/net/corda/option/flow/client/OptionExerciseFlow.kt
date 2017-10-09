@@ -12,15 +12,16 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import net.corda.option.DEMO_INSTANT
 import net.corda.option.ORACLE_NAME
+import net.corda.option.Stock
 import net.corda.option.contract.IOUContract
 import net.corda.option.contract.OptionContract
 import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
-import net.corda.option.Stock
 import java.time.Duration
 import java.time.Instant
 import java.util.function.Predicate
 
+// TODO: Describe this flow.
 object OptionExerciseFlow {
 
     @InitiatingFlow
@@ -51,26 +52,25 @@ object OptionExerciseFlow {
             // In Corda v1.0, we identify oracles we want to use by name.
             val oracle = serviceHub.firstIdentityByName(ORACLE_NAME)
 
+            progressTracker.currentStep = RETRIEVING_THE_INPUTS
             val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
             val inputState = stateAndRef.state.data
-
-            progressTracker.currentStep = RETRIEVING_THE_INPUTS
             // This flow can only be called by the option's current owner.
             require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner"}
 
             progressTracker.currentStep = QUERYING_THE_ORACLE
-            val spotOf = Stock(inputState.underlyingStock, DEMO_INSTANT)
-            val (spot, _) = subFlow(QueryOracle(oracle, spotOf))
+            val stockToQueryPriceOf = Stock(inputState.underlyingStock, DEMO_INSTANT)
+            val (spotPrice, _) = subFlow(QueryOracle(oracle, stockToQueryPriceOf))
 
             progressTracker.currentStep = BUILDING_THE_TX
-            val outputOptionState = inputState.exercise(spot.value)
+            val outputOptionState = inputState.exercise(spotPrice.value)
             val profit = OptionContract.calculateMoneyness(outputOptionState.strike, outputOptionState.spotPrice, outputOptionState.optionType)
-            // Use same linear id to keep track of the fact this IOU is linked to the option.
-            val iouState = IOUState(profit, inputState.owner, inputState.issuer, linearId = inputState.linearId)
+            // TODO: Establish how to link the output IOU to the output option. Re-using the linearId will cause issues.
+            val iouState = IOUState(profit, inputState.owner, inputState.issuer)
 
-            // By listing the oracle here, we make the oracle a required signer.
-            val exerciseCommand = Command(OptionContract.Commands.Exercise(spot), listOf(oracle.owningKey, inputState.owner.owningKey))
             val issueCommand = Command(IOUContract.Commands.Issue(), inputState.owner.owningKey)
+            // By listing the oracle here, we make the oracle a required signer.
+            val exerciseCommand = Command(OptionContract.Commands.Exercise(spotPrice), listOf(oracle.owningKey, inputState.owner.owningKey))
 
             // Add the state and the command to the builder.
             val builder = TransactionBuilder(notary)

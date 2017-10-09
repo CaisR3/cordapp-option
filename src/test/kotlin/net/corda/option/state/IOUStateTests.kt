@@ -89,7 +89,8 @@ class IOUStateTests {
     @Test
     fun checkIOUStateToStringMethod() {
         val iouState = IOUState(1.POUNDS, ALICE, BOB)
-        assertEquals(iouState.toString(), "IOU(${iouState.linearId}): CN=Bob Plc,O=Bob Plc,L=Rome,C=IT owes CN=Alice Corp,O=Alice Corp,L=Madrid,C=ES 1.00 GBP and has paid 0.00 GBP so far.")
+        assertEquals(iouState.toString(),
+                "IOU(${iouState.linearId}): ${iouState.borrower} owes ${iouState.lender} ${iouState.amount} and has paid ${iouState.paid} so far.")
     }
 
     @Test

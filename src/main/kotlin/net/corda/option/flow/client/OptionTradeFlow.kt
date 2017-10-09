@@ -8,10 +8,13 @@ import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
+import net.corda.option.contract.OptionContract
+import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.state.OptionState
 import java.time.Duration
 import java.time.Instant
 
+// TODO: Describe this flow.
 object OptionTradeFlow {
 
     @InitiatingFlow
@@ -21,6 +24,7 @@ object OptionTradeFlow {
         override val progressTracker: ProgressTracker = tracker()
 
         companion object {
+            object SET_UP : ProgressTracker.Step("Initialising flow.")
             object RETRIEVING_THE_INPUTS : ProgressTracker.Step("We retrieve the option to exercise from the vault.")
             object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
             object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
@@ -28,41 +32,39 @@ object OptionTradeFlow {
             object OTHERS_SIGN : ProgressTracker.Step("Requesting oracle signature.") {
                 override fun childProgressTracker() = CollectSignaturesFlow.tracker()
             }
+
             object FINALISING : ProgressTracker.Step("Finalising transaction.") {
                 override fun childProgressTracker() = FinalityFlow.tracker()
             }
 
-            fun tracker() = ProgressTracker(RETRIEVING_THE_INPUTS, BUILDING_THE_TX, VERIFYING_THE_TX, WE_SIGN, OTHERS_SIGN, FINALISING)
+            fun tracker() = ProgressTracker(SET_UP, RETRIEVING_THE_INPUTS, BUILDING_THE_TX, VERIFYING_THE_TX, WE_SIGN,
+                    OTHERS_SIGN, FINALISING)
         }
 
         @Suspendable
         override fun call(): SignedTransaction {
+            progressTracker.currentStep = SET_UP
+            val notary = serviceHub.firstNotary()
+
             progressTracker.currentStep = RETRIEVING_THE_INPUTS
             val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
             val inputState = stateAndRef.state.data
 
-            // This flow can only be initiated by the current owner
+            // This flow can only be initiated by the option's current owner.
             require(ourIdentity == inputState.owner) { "Option transfer can only be initiated by the current owner." }
 
             progressTracker.currentStep = BUILDING_THE_TX
-            // Create new state with new owner
-            val (tradeCommandData, outputState) = inputState.withNewOwner(newOwner)
+            val outputState = inputState.withNewOwner(newOwner)
 
-            // Create a new trade command.
-            // Gather the current participants along with the new owner
-            val parties = inputState.participants + newOwner
-            val partyKeys = parties.map { it.owningKey }
-            val tradeCommand = Command(tradeCommandData, partyKeys)
+            val requiredSigners = inputState.participants + newOwner
+            val tradeCommand = Command(OptionContract.Commands.Trade(), requiredSigners.map { it.owningKey })
 
-            // Get a reference to the notary service on our network and our key pair.
-            val notary = serviceHub.firstNotary()
             val builder = TransactionBuilder(notary)
-            builder.setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+                    .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+                    .addInputState(stateAndRef)
+                    .addOutputState(outputState, OPTION_CONTRACT_ID)
+                    .addCommand(tradeCommand)
 
-            // Add the option as an output state, as well as a command to the transaction builder.
-            builder.withItems(stateAndRef, outputState, tradeCommand)
-
-            // Verify and sign it with our KeyPair.
             progressTracker.currentStep = VERIFYING_THE_TX
             builder.verify(serviceHub)
 
@@ -70,12 +72,11 @@ object OptionTradeFlow {
             val ptx = serviceHub.signInitialTransaction(builder)
 
             progressTracker.currentStep = OTHERS_SIGN
-            val counterpartySessions = parties.map { initiateFlow(it) }
+            val counterpartySessions = requiredSigners.filter { it != ourIdentity }.map { initiateFlow(it) }
             val stx = subFlow(CollectSignaturesFlow(ptx, counterpartySessions, OTHERS_SIGN.childProgressTracker()))
 
-            // Assuming no exceptions, we can now finalise the transaction.
             progressTracker.currentStep = FINALISING
-            // For now, we operate under the assumption that the issuer needs to sign all trade deals
+            // For now, we operate under the assumption that the issuer needs to sign all trade deals.
             return subFlow(FinalityFlow(stx, setOf(inputState.issuer, inputState.owner, newOwner)))
         }
     }

@@ -1,34 +1,48 @@
 package net.corda.option.flow
 
 import net.corda.core.contracts.TransactionVerificationException
+import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.utilities.getOrThrow
 import net.corda.node.internal.StartedNode
+import net.corda.option.OPTION_LINEAR_ID
 import net.corda.option.ORACLE_NAME
 import net.corda.option.contract.OptionContract
+import net.corda.option.createOption
 import net.corda.option.flow.client.OptionIssueFlow
 import net.corda.option.flow.client.OptionTradeFlow
-import net.corda.option.getOption
 import net.corda.option.state.OptionState
-import net.corda.testing.DUMMY_NOTARY
 import net.corda.testing.node.MockNetwork
+import net.corda.testing.setCordappPackages
+import net.corda.testing.unsetCordappPackages
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class OptionTradeFlowTests {
     val mockNet: MockNetwork = MockNetwork()
-    lateinit var a: StartedNode<MockNetwork.MockNode>
-    lateinit var b: StartedNode<MockNetwork.MockNode>
-    lateinit var c: StartedNode<MockNetwork.MockNode>
+    lateinit var issuerNode: StartedNode<MockNetwork.MockNode>
+    lateinit var buyerANode: StartedNode<MockNetwork.MockNode>
+    lateinit var buyerBNode: StartedNode<MockNetwork.MockNode>
+
+    lateinit var issuer: Party
+    lateinit var buyerA: Party
+    lateinit var buyerB: Party
 
     @Before
     fun setup() {
+        setCordappPackages("net.corda.option.contract")
+
         val nodes = mockNet.createSomeNodes(3)
-        a = nodes.partyNodes[0]
-        b = nodes.partyNodes[1]
-        c = nodes.partyNodes[2]
+        issuerNode = nodes.partyNodes[0]
+        buyerANode = nodes.partyNodes[1]
+        buyerBNode = nodes.partyNodes[2]
+
+        issuer = issuerNode.info.legalIdentities.first()
+        buyerA = buyerANode.info.legalIdentities.first()
+        buyerB = buyerBNode.info.legalIdentities.first()
 
         val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
         oracle.internals.installCordaService(net.corda.option.service.Oracle::class.java)
@@ -42,71 +56,80 @@ class OptionTradeFlowTests {
 
     @After
     fun tearDown() {
+        unsetCordappPackages()
         mockNet.stopNodes()
     }
 
-    private fun issueOption(): SignedTransaction {
-        val option = getOption(a,b)
-        val flow = OptionIssueFlow.Initiator(option)
-        val future = a.services.startFlow(flow).resultFuture
-        mockNet.runNetwork()
-        return future.getOrThrow()
+    @Test
+    fun tradeFlowReturnsCorrectlyFormedSignedTransaction() {
+        issueOptionToBuyerA()
+        val stx = tradeOptionWithBuyerB()
+
+        // A single OptionState input.
+        assertEquals(1, stx.tx.inputs.size)
+        // TODO: Work out how to convert to a ledger transaction without an error.
+
+        // A single OptionState output.
+        assertEquals(1, stx.tx.outputs.size)
+        assert(stx.tx.outputStates.single() is OptionState)
+
+        // A single command with the correct attributes.
+        assertEquals(1, stx.tx.commands.size)
+        val command = stx.tx.commands.single()
+        assert(command.value is OptionContract.Commands.Trade)
+        listOf(issuer, buyerA, buyerB).forEach {
+            assert(command.signers.contains(it.owningKey))
+        }
     }
 
     @Test
-    fun tradeFlowReturnsCorrectlyFormedPartiallySignedTransaction() {
-        val stx = issueOption()
-        println("Signed transaction hash: ${stx.id}")
+    fun tradeFlowReturnsTransactionSignedByAllPartiesAndNotary() {
+        issueOptionToBuyerA()
+        val stx = tradeOptionWithBuyerB()
+        stx.verifyRequiredSignatures()
+    }
 
-        val flow = OptionTradeFlow.Initiator(getOption(a,b).linearId, c.info.legalIdentities.first())
-        val future = b.services.startFlow(flow).resultFuture
-        mockNet.runNetwork()
-        val ptx: SignedTransaction = future.getOrThrow()
-        // Print the transaction for debugging purposes.
-        println(ptx.tx)
-        // Check the transaction is well formed...
-        // No outputs, one input OptionState and a command with the right properties.
-        assert(ptx.tx.inputs.size == 1)
-        assert(ptx.tx.outputs.single().data is OptionState)
-        val command = ptx.tx.commands.single()
-        assert(command.value is OptionContract.Commands.Trade)
-        ptx.verifySignaturesExcept(c.info.legalIdentities.first().owningKey, DUMMY_NOTARY.owningKey)
+    @Test
+    fun tradeFlowRecordsTransactionInIssuerAndOwnersVaults() {
+        // TODO: Modify to actually check vaults.
+        issueOptionToBuyerA()
+        val stx = tradeOptionWithBuyerB()
+        stx.verifyRequiredSignatures()
     }
 
     @Test
     fun flowCanOnlyBeRunByCurrentOwner() {
-        issueOption()
-        val flow = OptionTradeFlow.Initiator(getOption(a,b).linearId, c.info.legalIdentities.first())
-        val future = a.services.startFlow(flow).resultFuture
+        issueOptionToBuyerA()
+        val flow = OptionTradeFlow.Initiator(OPTION_LINEAR_ID, buyerB)
+        // We are running the flow from the issuer, who doesn't currently own the option.
+        val future = issuerNode.services.startFlow(flow).resultFuture
         mockNet.runNetwork()
         assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
 
     @Test
     fun optionCannotBeTransferredToSameParty() {
-        issueOption()
-        val flow = OptionTradeFlow.Initiator(getOption(a,b).linearId, b.info.legalIdentities.first())
-        val future = b.services.startFlow(flow).resultFuture
+        issueOptionToBuyerA()
+        val flow = OptionTradeFlow.Initiator(OPTION_LINEAR_ID, buyerA)
+        // Buyer A already owns the option that they're trying to transfer to themselves.
+        val future = buyerANode.services.startFlow(flow).resultFuture
         mockNet.runNetwork()
-        // Check that we can't transfer an Option to ourselves.
         assertFailsWith<TransactionVerificationException> { future.getOrThrow() }
     }
 
-    @Test
-    fun tradeFlowReturnsTransactionSignedByAllParties() {
-        issueOption()
-        val flow = OptionTradeFlow.Initiator(getOption(a,b).linearId, c.info.legalIdentities.first())
-        val future = b.services.startFlow(flow).resultFuture
+    /** Issues an option from the issuer to buyer A. */
+    private fun issueOptionToBuyerA() {
+        val option = createOption(issuer, buyerA)
+        val flow = OptionIssueFlow.Initiator(option)
+        buyerANode.services.startFlow(flow).resultFuture
         mockNet.runNetwork()
-        future.getOrThrow().verifySignaturesExcept(DUMMY_NOTARY.owningKey)
     }
 
-    @Test
-    fun tradeFlowReturnsTransactionSignedByAllPartiesAndNotary() {
-        issueOption()
-        val flow = OptionTradeFlow.Initiator(getOption(a,b).linearId, c.info.legalIdentities.first())
-        val future = b.services.startFlow(flow).resultFuture
+    /** Transfers the option from buyer A to buyer B. */
+    private fun tradeOptionWithBuyerB(): SignedTransaction {
+        val flow = OptionTradeFlow.Initiator(OPTION_LINEAR_ID, buyerB)
+        val future = buyerANode.services.startFlow(flow).resultFuture
         mockNet.runNetwork()
-        future.getOrThrow().verifyRequiredSignatures()
+        return future.getOrThrow()
     }
 }

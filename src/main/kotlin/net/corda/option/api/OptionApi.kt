@@ -9,11 +9,10 @@ import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.utilities.days
 import net.corda.core.utilities.getOrThrow
 import net.corda.finance.contracts.asset.Cash
-import net.corda.option.flow.*
-import net.corda.option.state.IOUState
-import net.corda.option.state.OptionState
 import net.corda.option.OptionType
 import net.corda.option.flow.client.*
+import net.corda.option.state.IOUState
+import net.corda.option.state.OptionState
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -112,38 +111,6 @@ class OptionApi(val rpcOps: CordaRPCOps) {
             val result = flowHandle.use { it.returnValue.getOrThrow() }
             // Return the response.
             Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.single()}"
-        } catch (e: Exception) {
-            // For the purposes of this demo app, we do not differentiate by exception type.
-            Response.Status.BAD_REQUEST to e.message
-        }
-
-        return Response.status(status).entity(message).build()
-    }
-
-    /**
-     * Initiates a flow to agree an Option between two parties.
-     */
-    @GET
-    @Path("request-option")
-    fun requestOption(@QueryParam(value = "strike") strike: Int,
-                      @QueryParam(value = "currency") currency: String,
-                      @QueryParam(value = "expiry") expiry: String,
-                      @QueryParam(value = "underlying") underlying: String,
-                      @QueryParam(value = "issuer") issuer: CordaX500Name,
-                      @QueryParam(value = "optionType") optionType: String): Response {
-        // Get party objects for myself and the issuer.
-        val party = rpcOps.wellKnownPartyFromX500Name(issuer) ?: throw IllegalArgumentException("Unknown party name.")
-        val expiryInstant = LocalDate.parse(expiry).atStartOfDay().toInstant(ZoneOffset.UTC)
-        val optType = if (optionType.equals("CALL")) OptionType.CALL else OptionType.PUT
-        // Create a new Option state using the parameters given.
-        val state = OptionState(Amount(strike.toLong() * 100, Currency.getInstance(currency)), expiryInstant, underlying, Currency.getInstance(currency), party, me, optType)
-
-        // Start the OptionIssueFlow. We block and wait for the flow to return.
-        val (status, message) = try {
-            val flowHandle = rpcOps.startTrackedFlowDynamic(OptionRequestFlow.Initiator::class.java, state)
-            val result = flowHandle.use { it.returnValue.getOrThrow() }
-            // Return the response.
-            Response.Status.CREATED to "Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.first()} and \n${result.tx.outputs.last()}"
         } catch (e: Exception) {
             // For the purposes of this demo app, we do not differentiate by exception type.
             Response.Status.BAD_REQUEST to e.message

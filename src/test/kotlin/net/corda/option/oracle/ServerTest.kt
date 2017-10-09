@@ -1,6 +1,7 @@
 package net.corda.option.oracle
 
 import net.corda.core.contracts.Command
+import net.corda.core.contracts.StateAndContract
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
@@ -8,6 +9,7 @@ import net.corda.option.OptionType
 import net.corda.option.SpotPrice
 import net.corda.option.Stock
 import net.corda.option.contract.OptionContract
+import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.service.Oracle
 import net.corda.option.state.OptionState
 import net.corda.testing.*
@@ -20,31 +22,32 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 
-class OracleServiceTests {
-    private val dummyServices = MockServices(listOf("net.corda.examples.oracle.base.contract"), CHARLIE_KEY)
+class OracleServiceTests : TestDependencyInjectionBase() {
+    private val dummyServices = MockServices(listOf("net.corda.option.contract"), CHARLIE_KEY)
     private val oracle = Oracle(dummyServices)
-    private val attributeOf = Stock("IBM", Instant.parse("2017-07-03T10:15:30.00Z"))
+    private val stock = Stock("IBM", Instant.parse("2017-07-03T10:15:30.00Z"))
 
     @Test
     fun `successful query`() {
-        val result = oracle.querySpot(attributeOf)
+        val result = oracle.querySpot(stock)
         assertEquals(3.DOLLARS, result.value)
     }
 
     @Test
     fun `unsuccessful query`() {
-        val result = oracle.querySpot(attributeOf)
+        val result = oracle.querySpot(stock)
         assertNotEquals(5.DOLLARS, result.value)
 
     }
 
     @Test
     fun `successful sign`() {
-        val spot = SpotPrice(attributeOf, 3.DOLLARS)
+        val spot = SpotPrice(stock, 3.DOLLARS)
         val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
+        val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)
-                .withItems(state, command)
+                .withItems(stateAndContract, command)
                 .toWireTransaction(dummyServices)
                 .buildFilteredTransaction(Predicate {
                     when (it) {
@@ -57,12 +60,13 @@ class OracleServiceTests {
     }
 
     @Test
-    fun `incorrect spot specified`() {
-        val spot = SpotPrice(attributeOf, 20.DOLLARS)
+    fun `incorrect spot price specified`() {
+        val spot = SpotPrice(stock, 20.DOLLARS)
         val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
+        val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)
-                .withItems(state, command)
+                .withItems(stateAndContract, command)
                 .toWireTransaction(dummyServices)
                 .buildFilteredTransaction(Predicate {
                     when (it) {
