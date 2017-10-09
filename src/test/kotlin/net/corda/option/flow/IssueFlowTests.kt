@@ -2,6 +2,7 @@ package net.corda.option.flow
 
 import net.corda.core.contracts.TransactionVerificationException
 import net.corda.core.identity.Party
+import net.corda.core.node.services.queryBy
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.utilities.getOrThrow
 import net.corda.node.internal.StartedNode
@@ -93,14 +94,13 @@ class OptionIssueFlowTests {
 
     @Test
     fun issueFlowRecordsTheSameTransactionInBothPartiesVaults() {
-        val stx = issueOptionToBuyer()
+        issueOptionToBuyer()
 
-        // TODO: Convert this to a test of the vault, not the transaction storage.
-        for (node in listOf(issuerNode, buyerNode)) {
-            val recordedTx = node.services.validatedTransactions.getTransaction(stx.id)!!
-            val txHash = recordedTx.id
-            println("$txHash == ${stx.id}")
-            assertEquals(stx.id, txHash)
+        // TODO: No transaction in context - solve this.
+        listOf(issuerNode, buyerNode).forEach {
+            val vaultStates = it.services.vaultService.queryBy<OptionState>().states
+            // Exactly one OptioState is recorded in the vault.
+            assertEquals(1, vaultStates.size)
         }
     }
 
