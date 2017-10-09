@@ -20,6 +20,7 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 
 class OptionTradeFlowTests {
     val mockNet: MockNetwork = MockNetwork()
@@ -90,11 +91,15 @@ class OptionTradeFlowTests {
     }
 
     @Test
-    fun tradeFlowRecordsTransactionInIssuerAndOwnersVaults() {
-        // TODO: Modify to actually check vaults.
+    fun tradeFlowRecordsTheTransactionInAllPartiesTxStorages() {
         issueOptionToBuyerA()
         val stx = tradeOptionWithBuyerB()
-        stx.verifyRequiredSignatures()
+
+        listOf(issuerNode, buyerANode, buyerBNode).forEach {
+            val recordedTx = it.services.validatedTransactions.getTransaction(stx.id)
+            // The transaction with the correct ID is present in transaction storage.
+            assertNotNull(recordedTx)
+        }
     }
 
     @Test
