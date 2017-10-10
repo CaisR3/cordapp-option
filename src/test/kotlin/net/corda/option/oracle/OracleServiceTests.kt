@@ -13,8 +13,6 @@ import net.corda.option.state.OptionState
 import net.corda.testing.*
 import net.corda.testing.node.MockServices
 import org.junit.Test
-import java.time.Instant
-import java.util.*
 import java.util.function.Predicate
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -41,7 +39,7 @@ class OracleServiceTests : TestDependencyInjectionBase() {
     @Test
     fun `successful sign`() {
         val spot = SpotPrice(stock, 3.DOLLARS)
-        val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
+        val command = Command(OptionContract.Commands.Redeem(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
         val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)
@@ -49,7 +47,10 @@ class OracleServiceTests : TestDependencyInjectionBase() {
                 .toWireTransaction(dummyServices)
                 .buildFilteredTransaction(Predicate {
                     when (it) {
-                        is Command<*> -> oracle.services.myInfo.legalIdentities.first().owningKey in it.signers && it.value is OptionContract.Commands.Exercise
+                        is Command<*> ->
+                            oracle.services.myInfo.legalIdentities.first().owningKey in it.signers
+                                    && it.value is OptionContract.Commands.Redeem
+
                         else -> false
                     }
                 })
@@ -60,7 +61,7 @@ class OracleServiceTests : TestDependencyInjectionBase() {
     @Test
     fun `incorrect spot price specified`() {
         val spot = SpotPrice(stock, 20.DOLLARS)
-        val command = Command(OptionContract.Commands.Exercise(spot), listOf(CHARLIE.owningKey))
+        val command = Command(OptionContract.Commands.Redeem(spot), listOf(CHARLIE.owningKey))
         val state = getOption()
         val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)

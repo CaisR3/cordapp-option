@@ -3,9 +3,7 @@ package net.corda.option.contract
 import net.corda.core.contracts.*
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.finance.contracts.asset.Cash
-import net.corda.option.OptionType
 import net.corda.option.SpotPrice
-import net.corda.option.state.IOUState
 import net.corda.option.state.OptionState
 
 open class OptionContract : Contract {
@@ -21,10 +19,10 @@ open class OptionContract : Contract {
         when (command.value) {
             is Commands.Issue -> {
                 requireThat {
-                    "A cash input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
+                    "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
                     "No other inputs are consumed" using (tx.inputs.size == 1)
-                    "An option is issued onto the ledger" using (tx.outputsOfType<OptionState>().size == 1)
-                    "Cash is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "An OptionState is created on the ledger" using (tx.outputsOfType<OptionState>().size == 1)
+                    "The Cash.State is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
                     "No other states are created" using (tx.outputs.size == 2)
                     "Option issuances must be timestamped" using (tx.timeWindow?.untilTime != null)
 
@@ -42,9 +40,9 @@ open class OptionContract : Contract {
 
             is Commands.Trade -> {
                 requireThat {
-                    "An option is consumed" using (tx.inputsOfType<OptionState>().size == 1)
+                    "An OptionState is consumed" using (tx.inputsOfType<OptionState>().size == 1)
                     "No other inputs are consumed" using (tx.inputs.size == 1)
-                    "An new option is created" using (tx.outputsOfType<OptionState>().size == 1)
+                    "A new OptionState is created" using (tx.outputsOfType<OptionState>().size == 1)
                     "No other states are created" using (tx.outputs.size == 1)
 
                     val input = tx.inputsOfType<OptionState>().single()
@@ -60,26 +58,17 @@ open class OptionContract : Contract {
 
             is Commands.Exercise -> {
                 requireThat {
-                    "An option is consumed" using (tx.inputsOfType<OptionState>().size == 1)
+                    "An OptionState is consumed" using (tx.inputsOfType<OptionState>().size == 1)
                     "No other inputs are consumed" using (tx.inputs.size == 1)
-                    "An IOU is created" using (tx.outputsOfType<IOUState>().size == 1)
+                    "A new OptionState is created" using (tx.outputsOfType<OptionState>().size == 1)
                     "No other states are created" using (tx.outputs.size == 1)
                     "Exercises of options must be timestamped" using (tx.timeWindow?.fromTime != null)
 
                     val input = tx.inputsOfType<OptionState>().single()
-                    val output = tx.outputsOfType<IOUState>().single()
-                    val spotPrice = (command.value as Commands.Exercise).spot.value
+                    val output = tx.outputsOfType<OptionState>().single()
 
                     "The option is being exercised before maturity" using (tx.timeWindow!!.untilTime!! <= input.expiryDate)
-
-                    when (input.optionType) {
-                        OptionType.CALL ->
-                            "The IOU amount equals the spot minus the strike for a Call option" using
-                                    (output.amount == OptionState.calculateMoneyness(input.strikePrice, spotPrice, input.optionType))
-                        OptionType.PUT ->
-                            "The IOU amount equals the strike minus the spot for a Put option" using
-                                    (output.amount == OptionState.calculateMoneyness(input.strikePrice, spotPrice, input.optionType))
-                    }
+                    "The output option is exercised" using (output.exercised)
 
                     "Exercising the option is signed by the current owner of the option" using (input.owner.owningKey in command.signers)
                 }
@@ -92,6 +81,7 @@ open class OptionContract : Contract {
     interface Commands : CommandData {
         class Issue : TypeOnlyCommandData(), Commands
         class Trade : TypeOnlyCommandData(), Commands
-        class Exercise(val spot: SpotPrice) : Commands
+        class Exercise : TypeOnlyCommandData(), Commands
+        class Redeem(val spot: SpotPrice): Commands
     }
 }

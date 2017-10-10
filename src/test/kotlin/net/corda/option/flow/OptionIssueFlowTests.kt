@@ -1,6 +1,7 @@
 package net.corda.option.flow
 
 import net.corda.core.contracts.Amount
+import net.corda.core.contracts.InsufficientBalanceException
 import net.corda.core.contracts.TransactionVerificationException
 import net.corda.core.identity.Party
 import net.corda.core.node.services.queryBy
@@ -156,6 +157,15 @@ class OptionIssueFlowTests {
         val futureOne = buyerNode.services.startFlow(OptionIssueFlow.Initiator(badOption)).resultFuture
         mockNet.runNetwork()
         assertFailsWith<TransactionVerificationException> { futureOne.getOrThrow() }
+    }
+
+    @Test
+    fun `issue flow fails if the buyer does not have enough cash`() {
+        val option = createOption(issuer, buyer)
+        val flow = OptionIssueFlow.Initiator(option)
+        val future = buyerNode.services.startFlow(flow).resultFuture
+        mockNet.runNetwork()
+        assertFailsWith<InsufficientBalanceException> { future.getOrThrow() }
     }
 
     private fun issueCashToBuyer() {

@@ -59,7 +59,7 @@ object OptionTradeFlow {
             require(ourIdentity == inputState.owner) { "Option transfer can only be initiated by the current owner." }
 
             progressTracker.currentStep = BUILDING_THE_TX
-            val outputState = inputState.withNewOwner(newOwner)
+            val outputState = inputState.copy(owner = newOwner)
 
             val requiredSigners = inputState.participants + newOwner
             val tradeCommand = Command(OptionContract.Commands.Trade(), requiredSigners.map { it.owningKey })

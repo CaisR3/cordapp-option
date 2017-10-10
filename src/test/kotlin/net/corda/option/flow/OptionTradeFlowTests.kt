@@ -147,7 +147,7 @@ class OptionTradeFlowTests {
     }
 
     @Test
-    fun optionCannotBeTransferredToSameParty() {
+    fun `option cannot be transferred to the same party`() {
         issueCashToBuyerA()
         val option = createOption(issuer, buyerA)
         issueOptionToBuyerA(option)

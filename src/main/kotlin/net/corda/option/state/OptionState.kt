@@ -11,7 +11,7 @@ import java.time.Instant
 import java.util.*
 
 /**
- * Models an option contract.
+ * Models an (American) option contract.
  *
  * @property strikePrice price at which the [underlyingStock] can be purchased or sold.
  * @property expiryDate time after which option cannot be exercised.
@@ -30,9 +30,12 @@ data class OptionState(
         val owner: Party,
         val optionType: OptionType,
         var spotPriceAtPurchase: Amount<Currency> = Amount(0, strikePrice.token),
+        val exercised: Boolean = false,
+        val exercisedOnDate: Instant? = null,
         override val linearId: UniqueIdentifier = UniqueIdentifier()) : LinearState {
 
     companion object {
+        // TODO: Do not delete. Will be used later.
         fun calculateMoneyness(strike: Amount<Currency>, spot: Amount<Currency>, optionType: OptionType): Amount<Currency> {
             val zeroAmount = Amount.zero(spot.token)
             when {
@@ -46,7 +49,7 @@ data class OptionState(
             }
         }
 
-        fun calculatePrice(optionState: OptionState, volatility: Double): Long {
+        fun calculatePremium(optionState: OptionState, volatility: Double): Long {
             val blackScholes = BlackScholes(optionState.spotPriceAtPurchase.quantity.toDouble(), optionState.strikePrice.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility)
             if (optionState.optionType == OptionType.CALL)
             {
@@ -57,12 +60,6 @@ data class OptionState(
     }
 
     override val participants get() = listOf(owner, issuer)
-
-    /**
-     * Creates a copy of the current state with a different owner.
-     * Used when transferring the state.
-     */
-    fun withNewOwner(newOwner: Party) = copy(owner = newOwner)
 
     override fun toString() = "${this.optionType.name} option on ${this.underlyingStock} at strike ${this.strikePrice} expiring on ${this.expiryDate}"
 }

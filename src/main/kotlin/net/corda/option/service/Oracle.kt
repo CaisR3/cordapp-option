@@ -42,22 +42,22 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
      * Signs over a transaction if the specified Nth prime for a particular N is correct.
      * This function takes a filtered transaction which is a partial Merkle tree. Any parts of the transaction which
      * the oracle doesn't need to see in order to verify the correctness of the nth prime have been removed. In this
-     * case, all but the [OptionContract.Commands.Exercise] commands have been removed. If the Nth prime is correct
+     * case, all but the [OptionContract.Commands.Redeem] commands have been removed. If the Nth prime is correct
      * then the oracle signs over the Merkle root (the hash) of the transaction.
      */
     fun sign(ftx: FilteredTransaction): TransactionSignature {
         // Is the partial Merkle tree valid?
         ftx.verify()
 
-        /** Returns true if the component is an exercise command that:
+        /** Returns true if the component is an Redeem command that:
          *  - States the correct price
          *  - Has the oracle listed as a signer
          */
-        fun isExerciseCommandWithCorrectPriceAndIAmSigner(elem: Any): Boolean {
+        fun isRedeemCommandWithCorrectPriceAndIAmSigner(elem: Any): Boolean {
             return when (elem) {
                 is Command<*> -> {
-                    if (elem.value is OptionContract.Commands.Exercise) {
-                        val cmdData = elem.value as OptionContract.Commands.Exercise
+                    if (elem.value is OptionContract.Commands.Redeem) {
+                        val cmdData = elem.value as OptionContract.Commands.Redeem
                         myKey in elem.signers && querySpot(cmdData.spot.stock) == cmdData.spot
                     } else {
                         false
@@ -68,7 +68,7 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
         }
 
         // Is it a Merkle tree we are willing to sign over?
-        val isValidMerkleTree = ftx.checkWithFun(::isExerciseCommandWithCorrectPriceAndIAmSigner)
+        val isValidMerkleTree = ftx.checkWithFun(::isRedeemCommandWithCorrectPriceAndIAmSigner)
 
         return if (isValidMerkleTree) {
             services.createSignature(ftx, myKey)

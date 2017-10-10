@@ -10,8 +10,10 @@ import net.corda.core.utilities.days
 import net.corda.core.utilities.getOrThrow
 import net.corda.finance.contracts.asset.Cash
 import net.corda.option.OptionType
-import net.corda.option.flow.client.*
-import net.corda.option.state.IOUState
+import net.corda.option.flow.client.OptionExerciseFlow
+import net.corda.option.flow.client.OptionIssueFlow
+import net.corda.option.flow.client.OptionTradeFlow
+import net.corda.option.flow.client.SelfIssueCashFlow
 import net.corda.option.state.OptionState
 import java.time.Instant
 import java.time.LocalDate
@@ -66,14 +68,6 @@ class OptionApi(val rpcOps: CordaRPCOps) {
             // Filter by state type: Option.
     fun getOptions(): List<StateAndRef<OptionState>> {
         return rpcOps.vaultQueryBy<OptionState>().states
-    }
-
-    @GET
-    @Path("ious")
-    @Produces(MediaType.APPLICATION_JSON)
-            // Filter by state type: Option.
-    fun getIOUs(): List<StateAndRef<IOUState>> {
-        return rpcOps.vaultQueryBy<IOUState>().states
     }
 
     /**
