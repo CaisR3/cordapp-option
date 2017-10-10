@@ -21,27 +21,26 @@ import kotlin.test.assertNotEquals
 class OracleServiceTests : TestDependencyInjectionBase() {
     private val dummyServices = MockServices(listOf("net.corda.option.contract"), CHARLIE_KEY)
     private val oracle = Oracle(dummyServices)
-    private val stock = Stock(COMPANY_1, DUMMY_OPTION_DATE)
+
+    private val option = OptionState(
+            strikePrice = 10.DOLLARS,
+            expiryDate = TEST_TX_TIME + 30.days,
+            underlyingStock = COMPANY_STOCK_1.company,
+            issuer = MEGA_CORP,
+            owner = MEGA_CORP,
+            optionType = OptionType.PUT
+    )
 
     @Test
     fun `successful query`() {
-        val result = oracle.querySpot(stock)
+        val result = oracle.querySpot(COMPANY_STOCK_1)
         assertEquals(3.DOLLARS, result.value)
     }
 
     @Test
-    fun `unsuccessful query`() {
-        val result = oracle.querySpot(stock)
-        assertNotEquals(5.DOLLARS, result.value)
-
-    }
-
-    @Test
     fun `successful sign`() {
-        val spot = SpotPrice(stock, 3.DOLLARS)
-        val command = Command(OptionContract.Commands.Redeem(spot), listOf(CHARLIE.owningKey))
-        val state = getOption()
-        val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
+        val command = Command(OptionContract.Commands.Issue(KNOWN_SPOTS[0], KNOWN_VOLATILITIES[0]), listOf(CHARLIE.owningKey))
+        val stateAndContract = StateAndContract(option, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)
                 .withItems(stateAndContract, command)
                 .toWireTransaction(dummyServices)
@@ -49,7 +48,7 @@ class OracleServiceTests : TestDependencyInjectionBase() {
                     when (it) {
                         is Command<*> ->
                             oracle.services.myInfo.legalIdentities.first().owningKey in it.signers
-                                    && it.value is OptionContract.Commands.Redeem
+                                    && it.value is OptionContract.Commands.Issue
 
                         else -> false
                     }
@@ -60,29 +59,37 @@ class OracleServiceTests : TestDependencyInjectionBase() {
 
     @Test
     fun `incorrect spot price specified`() {
-        val spot = SpotPrice(stock, 20.DOLLARS)
-        val command = Command(OptionContract.Commands.Redeem(spot), listOf(CHARLIE.owningKey))
-        val state = getOption()
-        val stateAndContract = StateAndContract(state, OPTION_CONTRACT_ID)
+        val incorrectSpot = SpotPrice(COMPANY_STOCK_1, 20.DOLLARS)
+        val command = Command(OptionContract.Commands.Issue(incorrectSpot, KNOWN_VOLATILITIES[0]), listOf(CHARLIE.owningKey))
+        val stateAndContract = StateAndContract(option, OPTION_CONTRACT_ID)
         val ftx = TransactionBuilder(DUMMY_NOTARY)
                 .withItems(stateAndContract, command)
                 .toWireTransaction(dummyServices)
                 .buildFilteredTransaction(Predicate {
                     when (it) {
-                        is Command<*> -> oracle.services.myInfo.legalIdentities.first().owningKey in it.signers && it.value is OptionContract.Commands.Exercise
+                        is Command<*> -> oracle.services.myInfo.legalIdentities.first().owningKey in it.signers
+                                && it.value is OptionContract.Commands.Issue
                         else -> false
                     }
                 })
         assertFailsWith<IllegalArgumentException> { oracle.sign(ftx) }
-
     }
 
-    private fun getOption(): OptionState = OptionState(
-            strikePrice = 10.DOLLARS,
-            expiryDate = TEST_TX_TIME + 30.days,
-            underlyingStock = "IBM",
-            issuer = MEGA_CORP,
-            owner = MEGA_CORP,
-            optionType = OptionType.PUT
-    )
+    @Test
+    fun `incorrect volatility specified`() {
+        val incorrectVolatility = Volatility(COMPANY_STOCK_1, 1.toDouble())
+        val command = Command(OptionContract.Commands.Issue(KNOWN_SPOTS[0], incorrectVolatility), listOf(CHARLIE.owningKey))
+        val stateAndContract = StateAndContract(option, OPTION_CONTRACT_ID)
+        val ftx = TransactionBuilder(DUMMY_NOTARY)
+                .withItems(stateAndContract, command)
+                .toWireTransaction(dummyServices)
+                .buildFilteredTransaction(Predicate {
+                    when (it) {
+                        is Command<*> -> oracle.services.myInfo.legalIdentities.first().owningKey in it.signers
+                                && it.value is OptionContract.Commands.Issue
+                        else -> false
+                    }
+                })
+        assertFailsWith<IllegalArgumentException> { oracle.sign(ftx) }
+    }
 }

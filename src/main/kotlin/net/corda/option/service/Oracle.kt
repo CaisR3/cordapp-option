@@ -39,11 +39,11 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
     }
 
     /**
-     * Signs over a transaction if the specified Nth prime for a particular N is correct.
+     * Signs over a transaction if the specified spot price and volatility are correct.
      * This function takes a filtered transaction which is a partial Merkle tree. Any parts of the transaction which
      * the oracle doesn't need to see in order to verify the correctness of the nth prime have been removed. In this
-     * case, all but the [OptionContract.Commands.Redeem] commands have been removed. If the Nth prime is correct
-     * then the oracle signs over the Merkle root (the hash) of the transaction.
+     * case, all but the [OptionContract.Commands.OracleCommands] commands have been removed. If the spot price and
+     * volatility are correct then the oracle signs over the Merkle root (the hash) of the transaction.
      */
     fun sign(ftx: FilteredTransaction): TransactionSignature {
         // Is the partial Merkle tree valid?
@@ -53,12 +53,14 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
          *  - States the correct price
          *  - Has the oracle listed as a signer
          */
-        fun isRedeemCommandWithCorrectPriceAndIAmSigner(elem: Any): Boolean {
+        fun isCommandWithCorrectPriceAndVolatilityAndIAmSigner(elem: Any): Boolean {
             return when (elem) {
                 is Command<*> -> {
-                    if (elem.value is OptionContract.Commands.Redeem) {
-                        val cmdData = elem.value as OptionContract.Commands.Redeem
-                        myKey in elem.signers && querySpot(cmdData.spot.stock) == cmdData.spot
+                    if (elem.value is OptionContract.Commands.OracleCommands) {
+                        val cmdData = elem.value as OptionContract.Commands.OracleCommands
+                        myKey in elem.signers
+                                && querySpot(cmdData.spot.stock) == cmdData.spot
+                                && queryVolatility(cmdData.spot.stock) == cmdData.volatility
                     } else {
                         false
                     }
@@ -68,7 +70,7 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
         }
 
         // Is it a Merkle tree we are willing to sign over?
-        val isValidMerkleTree = ftx.checkWithFun(::isRedeemCommandWithCorrectPriceAndIAmSigner)
+        val isValidMerkleTree = ftx.checkWithFun(::isCommandWithCorrectPriceAndVolatilityAndIAmSigner)
 
         return if (isValidMerkleTree) {
             services.createSignature(ftx, myKey)

@@ -4,6 +4,7 @@ import net.corda.core.contracts.*
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.finance.contracts.asset.Cash
 import net.corda.option.SpotPrice
+import net.corda.option.Volatility
 import net.corda.option.state.OptionState
 
 open class OptionContract : Contract {
@@ -19,14 +20,13 @@ open class OptionContract : Contract {
         when (command.value) {
             is Commands.Issue -> {
                 requireThat {
+                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
                     "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
                     "No other inputs are consumed" using (tx.inputs.size == 1)
                     "An OptionState is created on the ledger" using (tx.outputsOfType<OptionState>().size == 1)
                     "The Cash.State is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
                     "No other states are created" using (tx.outputs.size == 2)
                     "Option issuances must be timestamped" using (tx.timeWindow?.untilTime != null)
-
-                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
 
                     val optionOutput = tx.outputsOfType<OptionState>().single()
                     val time = tx.timeWindow!!.untilTime!!
@@ -40,17 +40,20 @@ open class OptionContract : Contract {
 
             is Commands.Trade -> {
                 requireThat {
+                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
+                    "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
                     "An OptionState is consumed" using (tx.inputsOfType<OptionState>().size == 1)
-                    "No other inputs are consumed" using (tx.inputs.size == 1)
+                    "No other inputs are consumed" using (tx.inputs.size == 2)
                     "A new OptionState is created" using (tx.outputsOfType<OptionState>().size == 1)
-                    "No other states are created" using (tx.outputs.size == 1)
+                    "The Cash.State is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "No other states are created" using (tx.outputs.size == 2)
+                    "Option trades must be timestamped" using (tx.timeWindow?.untilTime != null)
 
                     val input = tx.inputsOfType<OptionState>().single()
                     val output = tx.outputsOfType<OptionState>().single()
                     "Only the owner property may change." using (input.copy(owner = output.owner) == output)
                     "The owner property must change." using (input.owner != output.owner)
 
-                    "The trade is signed by the issuer of the option" using (input.issuer.owningKey in command.signers)
                     "The trade is signed by the current owner of the option" using (input.owner.owningKey in command.signers)
                     "The trade is signed by the new owner of the option" using (output.owner.owningKey in command.signers)
                 }
@@ -79,9 +82,15 @@ open class OptionContract : Contract {
     }
 
     interface Commands : CommandData {
-        class Issue : TypeOnlyCommandData(), Commands
-        class Trade : TypeOnlyCommandData(), Commands
+
+        interface OracleCommands {
+            val spot: SpotPrice
+            val volatility: Volatility
+        }
+
+        class Issue(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
+        class Trade(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
         class Exercise : TypeOnlyCommandData(), Commands
-        class Redeem(val spot: SpotPrice): Commands
+        class Redeem(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
     }
 }

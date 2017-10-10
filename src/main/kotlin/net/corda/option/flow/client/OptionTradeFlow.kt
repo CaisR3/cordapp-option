@@ -1,18 +1,26 @@
 package net.corda.option.flow.client
 
 import co.paralleluniverse.fibers.Suspendable
+import net.corda.core.contracts.Amount
 import net.corda.core.contracts.Command
+import net.corda.core.contracts.StateAndRef
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.flows.*
 import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
+import net.corda.core.utilities.unwrap
+import net.corda.finance.contracts.asset.Cash
+import net.corda.option.DUMMY_OPTION_DATE
+import net.corda.option.ORACLE_NAME
+import net.corda.option.Stock
 import net.corda.option.contract.OptionContract
 import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.state.OptionState
 import java.time.Duration
 import java.time.Instant
+import java.util.function.Predicate
 
 object OptionTradeFlow {
 
@@ -29,46 +37,94 @@ object OptionTradeFlow {
         override val progressTracker: ProgressTracker = tracker()
 
         companion object {
-            object SET_UP : ProgressTracker.Step("Initialising flow.")
             object RETRIEVING_THE_INPUTS : ProgressTracker.Step("We retrieve the option to exercise from the vault.")
-            object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
-            object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
-            object WE_SIGN : ProgressTracker.Step("signing transaction.")
-            object OTHERS_SIGN : ProgressTracker.Step("Requesting oracle signature.") {
-                override fun childProgressTracker() = CollectSignaturesFlow.tracker()
+            object SENDING_THE_EXISTING_OPTION : ProgressTracker.Step("We send the existing option to the counterparty.")
+
+            fun tracker() = ProgressTracker(RETRIEVING_THE_INPUTS, SENDING_THE_EXISTING_OPTION)
+        }
+
+        @Suspendable
+        override fun call(): SignedTransaction {
+            progressTracker.currentStep = RETRIEVING_THE_INPUTS
+            val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
+            val inputOption = stateAndRef.state.data
+
+            // This flow can only be initiated by the option's current owner.
+            require(ourIdentity == inputOption.owner) { "Option transfer can only be initiated by the current owner." }
+
+            progressTracker.currentStep = SENDING_THE_EXISTING_OPTION
+            val counterpartySession = initiateFlow(newOwner)
+            counterpartySession.send(stateAndRef)
+
+            val flow = object : SignTransactionFlow(counterpartySession) {
+                @Suspendable
+                override fun checkTransaction(stx: SignedTransaction) {
+                    // We check the oracle is a required signer. If so, we can trust the spot price and volatility data.
+                    val oracle = serviceHub.firstIdentityByName(ORACLE_NAME)
+                    stx.requiredSigningKeys.contains(oracle.owningKey)
+                }
             }
 
+            val stx = subFlow(flow)
+            return waitForLedgerCommit(stx.id)
+        }
+    }
+
+    @InitiatingFlow
+    @InitiatedBy(Initiator::class)
+    class Responder(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
+
+        override val progressTracker: ProgressTracker = tracker()
+
+        companion object {
+            object SET_UP : ProgressTracker.Step("Initialising flow.")
+            object RECEIVING_INPUT_OPTION : ProgressTracker.Step("We receive the input option from the counterparty.")
+            object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the current spot price and volatility.")
+            object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
+            object ADDING_CASH_PAYMENT : ProgressTracker.Step("Adding the cash to cover the premium.")
+            object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
+            object WE_SIGN : ProgressTracker.Step("signing transaction.")
+            object ORACLE_SIGNS : ProgressTracker.Step("Requesting oracle signature.")
+            object OTHERS_SIGN : ProgressTracker.Step("Requesting old owner's signature.") {
+                override fun childProgressTracker() = CollectSignaturesFlow.tracker()
+            }
             object FINALISING : ProgressTracker.Step("Finalising transaction.") {
                 override fun childProgressTracker() = FinalityFlow.tracker()
             }
 
-            fun tracker() = ProgressTracker(SET_UP, RETRIEVING_THE_INPUTS, BUILDING_THE_TX, VERIFYING_THE_TX, WE_SIGN,
-                    OTHERS_SIGN, FINALISING)
+            fun tracker() = ProgressTracker(SET_UP, RECEIVING_INPUT_OPTION, QUERYING_THE_ORACLE, BUILDING_THE_TX,
+                    ADDING_CASH_PAYMENT, VERIFYING_THE_TX, WE_SIGN, OTHERS_SIGN, FINALISING)
         }
 
         @Suspendable
         override fun call(): SignedTransaction {
             progressTracker.currentStep = SET_UP
-            val notary = serviceHub.firstNotary()
+            // In Corda v1.0, we identify oracles we want to use by name.
+            val oracle = serviceHub.firstIdentityByName(ORACLE_NAME)
 
-            progressTracker.currentStep = RETRIEVING_THE_INPUTS
-            val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
-            val inputState = stateAndRef.state.data
+            progressTracker.currentStep = RECEIVING_INPUT_OPTION
+            val stateAndRef = counterpartySession.receive<StateAndRef<OptionState>>().unwrap { it -> it }
+            val inputOption = stateAndRef.state.data
 
-            // This flow can only be initiated by the option's current owner.
-            require(ourIdentity == inputState.owner) { "Option transfer can only be initiated by the current owner." }
+            progressTracker.currentStep = QUERYING_THE_ORACLE
+            val stockToCalculatePriceAndVolatilityOf = Stock(inputOption.underlyingStock, DUMMY_OPTION_DATE)
+            val (spotPrice, volatility) = subFlow(QueryOracle(oracle, stockToCalculatePriceAndVolatilityOf))
 
             progressTracker.currentStep = BUILDING_THE_TX
-            val outputState = inputState.copy(owner = newOwner)
+            val outputState = inputOption.copy(owner = ourIdentity, spotPriceAtPurchase = spotPrice.value)
 
-            val requiredSigners = inputState.participants + newOwner
-            val tradeCommand = Command(OptionContract.Commands.Trade(), requiredSigners.map { it.owningKey })
+            val requiredSigners = listOf(inputOption.owner, ourIdentity, oracle)
+            val tradeCommand = Command(OptionContract.Commands.Trade(spotPrice, volatility), requiredSigners.map { it.owningKey })
 
-            val builder = TransactionBuilder(notary)
-                    .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+            val builder = TransactionBuilder(stateAndRef.state.notary)
                     .addInputState(stateAndRef)
                     .addOutputState(outputState, OPTION_CONTRACT_ID)
                     .addCommand(tradeCommand)
+                    .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
+
+            progressTracker.currentStep = ADDING_CASH_PAYMENT
+            val optionPrice = Amount(OptionState.calculatePremium(inputOption, volatility.value), inputOption.strikePrice.token)
+            Cash.generateSpend(serviceHub, builder, optionPrice, inputOption.issuer)
 
             progressTracker.currentStep = VERIFYING_THE_TX
             builder.verify(serviceHub)
@@ -76,29 +132,24 @@ object OptionTradeFlow {
             progressTracker.currentStep = WE_SIGN
             val ptx = serviceHub.signInitialTransaction(builder)
 
+            progressTracker.currentStep = ORACLE_SIGNS
+            // For privacy reasons, we only want to expose to the oracle any commands of type
+            // `OptionContract.Commands.Trade` that require its signature.
+            val ftx = ptx.buildFilteredTransaction(Predicate {
+                when (it) {
+                    is Command<*> -> oracle.owningKey in it.signers && it.value is OptionContract.Commands.Trade
+                    else -> false
+                }
+            })
+
+            val oracleSignature = subFlow(RequestOracleSig(oracle, ftx))
+            val ptxWithOracleSig = ptx.withAdditionalSignature(oracleSignature)
+
             progressTracker.currentStep = OTHERS_SIGN
-            val counterpartySessions = requiredSigners.filter { it != ourIdentity }.map { initiateFlow(it) }
-            val stx = subFlow(CollectSignaturesFlow(ptx, counterpartySessions, OTHERS_SIGN.childProgressTracker()))
+            val stx = subFlow(CollectSignaturesFlow(ptxWithOracleSig, listOf(counterpartySession), OTHERS_SIGN.childProgressTracker()))
 
             progressTracker.currentStep = FINALISING
             return subFlow(FinalityFlow(stx))
-        }
-    }
-
-    @InitiatingFlow
-    @InitiatedBy(Initiator::class)
-    class Responder(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
-        @Suspendable
-        override fun call(): SignedTransaction {
-            val flow = object : SignTransactionFlow(counterpartySession) {
-                @Suspendable
-                override fun checkTransaction(stx: SignedTransaction) {
-                    // TODO: Add some checking.
-                }
-            }
-
-            val stx = subFlow(flow)
-            return waitForLedgerCommit(stx.id)
         }
     }
 }
