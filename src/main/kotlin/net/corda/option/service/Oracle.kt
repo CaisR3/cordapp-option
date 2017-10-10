@@ -6,11 +6,8 @@ import net.corda.core.node.ServiceHub
 import net.corda.core.node.services.CordaService
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.transactions.FilteredTransaction
-import net.corda.finance.DOLLARS
 import net.corda.option.*
 import net.corda.option.contract.OptionContract
-import org.apache.commons.io.IOUtils
-import java.time.Instant
 
 /**
  *  We sub-class 'SingletonSerializeAsToken' to ensure that instances of this class are never serialised by Kryo. When
@@ -28,8 +25,8 @@ import java.time.Instant
 class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
     private val myKey = services.myInfo.legalIdentities.first().owningKey
 
-    private val knownSpots = loadSpots()
-    private val knownVolatilities = loadVolatilities()
+    private val knownSpots = KNOWN_SPOTS
+    private val knownVolatilities = KNOWN_VOLATILITIES
 
     /** Returns spot for a given stock. */
     fun querySpot(stock: Stock): SpotPrice {
@@ -41,63 +38,12 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
         return knownVolatilities.find { it.stock == stock } ?: throw IllegalArgumentException("Unknown volatility.")
     }
 
-    /** Loads a list of [Spot]s from a file. */
-    private fun loadSpots(): List<SpotPrice> {
-        val fileNonEmptyLines = loadNonEmptyLinesFromFile(SPOTS_TXT_FILE)
-        return fileNonEmptyLines.map { parseSpotFromString(it) }.toList()
-    }
-
-    /** Loads a list of [Volatility]s from a file. */
-    private fun loadVolatilities(): List<Volatility> {
-        val fileNonEmptyLines = loadNonEmptyLinesFromFile(VOLS_TXT_FILE)
-        return fileNonEmptyLines.map { parseVolatilityFromString(it) }.toList()
-    }
-
-    /** Reads a file into a series of lines, with empty lines filtered out. */
-    private fun loadNonEmptyLinesFromFile(fileName: String): List<String> {
-        val fileStream = Thread.currentThread().contextClassLoader.getResourceAsStream(fileName)
-        val fileString = IOUtils.toString(fileStream, Charsets.UTF_8.name())
-        return fileString.lines().filter { it != "" }
-    }
-
-    /** Parses a string of the form "IBM 13:30 = 123" into a [Spot]. */
-    private fun parseSpotFromString(s: String): SpotPrice {
-        val (stock, price) = parseStockAndDoubleFromString(s)
-        return SpotPrice(stock, DOLLARS(price))
-    }
-
-    /** Parses a string of the form "IBM 13:30 = 123" into a [Volatility]. */
-    private fun parseVolatilityFromString(s: String): Volatility {
-        val (stock, volatility) = parseStockAndDoubleFromString(s)
-        return Volatility(stock, volatility)
-    }
-
-    /** Parses a string of the form "IBM 13:30 = 123" into a [Pair] of Stock, Double. */
-    private fun parseStockAndDoubleFromString(s: String): Pair<Stock, Double> {
-        val (stockNameAndTime, doubleStr) = s.split('=').map { it.trim() }
-        val stock = try {
-            parseStockFromString(stockNameAndTime)
-        } catch (e: Exception) {
-            throw IllegalArgumentException("Unable to parse vol $s: ${e.message}", e)
-        }
-        val double = doubleStr.toDouble()
-        return Pair(stock, double)
-    }
-
-    /** Parses a string of the form "IBM 13:30" into a [Stock]. */
-    private fun parseStockFromString(key: String): Stock {
-        val words = key.split(' ')
-        val time = words.last()
-        val name = words.dropLast(1).joinToString(" ")
-        return Stock(name, Instant.parse(time))
-    }
-
     /**
      * Signs over a transaction if the specified Nth prime for a particular N is correct.
      * This function takes a filtered transaction which is a partial Merkle tree. Any parts of the transaction which
      * the oracle doesn't need to see in order to verify the correctness of the nth prime have been removed. In this
-     * case, all but the [PrimeContract.Create] commands have been removed. If the Nth prime is correct then the oracle
-     * signs over the Merkle root (the hash) of the transaction.
+     * case, all but the [OptionContract.Commands.Exercise] commands have been removed. If the Nth prime is correct
+     * then the oracle signs over the Merkle root (the hash) of the transaction.
      */
     fun sign(ftx: FilteredTransaction): TransactionSignature {
         // Is the partial Merkle tree valid?
@@ -124,8 +70,8 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
         // Is it a Merkle tree we are willing to sign over?
         val isValidMerkleTree = ftx.checkWithFun(::isExerciseCommandWithCorrectPriceAndIAmSigner)
 
-        if (isValidMerkleTree) {
-            return services.createSignature(ftx, myKey)
+        return if (isValidMerkleTree) {
+            services.createSignature(ftx, myKey)
         } else {
             throw IllegalArgumentException("Oracle signature requested over invalid transaction.")
         }

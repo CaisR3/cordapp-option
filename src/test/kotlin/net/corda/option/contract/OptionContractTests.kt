@@ -14,7 +14,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-class OptionTransactionTests {
+class OptionContractTests {
 
     @Before
     fun setup() {
@@ -42,28 +42,27 @@ class OptionTransactionTests {
             transaction("Issue Mega Corp's option") {
                 output(OPTION_CONTRACT_ID, "Mega Corp's option", option)
                 command(MEGA_CORP_PUBKEY, OptionContract.Commands.Issue())
-                this.timeWindow(TEST_TX_TIME)
-                this.verifies()
+                timeWindow(TEST_TX_TIME)
+                verifies()
             }
 
             transaction("Trade Mega Corp's option for Mini Corp's $3") {
                 input("Mega Corp's option")
                 input("Mini Corp's $3")
                 output(CASH_PROGRAM_ID, "Mega Corp's $3", 3.DOLLARS.CASH `issued by` issuer `owned by` MEGA_CORP)
-                output(OPTION_CONTRACT_ID, "Mini Corp's option") { "Mega Corp's option".output<OptionState>() `owned by` MINI_CORP }
+                output(OPTION_CONTRACT_ID, "Mini Corp's option") { "Mega Corp's option".output<OptionState>().withNewOwner(MINI_CORP) }
                 command(MINI_CORP_PUBKEY) { Cash.Commands.Move() }
                 command(MEGA_CORP_PUBKEY, MINI_CORP_PUBKEY) { OptionContract.Commands.Trade() }
-                this.verifies()
+                verifies()
             }
 
             transaction("Exercise Mini Corp's option and receive an IOU of $9 from Mega Corp") {
                 input("Mini Corp's option")
-                output(OPTION_CONTRACT_ID, "Mini Corp's exercised option") { "Mini Corp's option".output<OptionState>().exercise(5.DOLLARS) `owned by` MINI_CORP }
                 output(IOU_CONTRACT_ID, "Mini Corp's IOU from Mega Corp", iou)
                 command(MINI_CORP_PUBKEY) { OptionContract.Commands.Exercise(spot) }
                 command(MINI_CORP_PUBKEY) { IOUContract.Commands.Issue()}
-                this.timeWindow(TEST_TX_TIME)
-                this.verifies()
+                timeWindow(TEST_TX_TIME)
+                verifies()
             }
         }
     }

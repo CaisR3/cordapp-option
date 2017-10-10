@@ -101,9 +101,9 @@ class OptionApi(val rpcOps: CordaRPCOps) {
         // Get party objects for myself and the counterparty.
         val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
         val expiryInstant = LocalDate.parse(expiry).atStartOfDay().toInstant(ZoneOffset.UTC)
-        val optType = if (optionType.equals("CALL")) OptionType.CALL else OptionType.PUT
+        val optType = if (optionType == "CALL") OptionType.CALL else OptionType.PUT
         // Create a new Option state using the parameters given.
-        val state = OptionState(Amount(strike.toLong() * 100, Currency.getInstance(currency)), expiryInstant, underlying, Currency.getInstance(currency), me, party, optType)
+        val state = OptionState(Amount(strike.toLong() * 100, Currency.getInstance(currency)), expiryInstant, underlying, me, party, optType)
 
         // Start the OptionIssueFlow. We block and wait for the flow to return.
         val (status, message) = try {
@@ -135,18 +135,18 @@ class OptionApi(val rpcOps: CordaRPCOps) {
         // Get party objects for myself and the counterparty.
         val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
         // Create a new Option state using the parameters given.
-        val state = OptionState(Amount(amount.toLong() * 100, Currency.getInstance(currency)), expiry, underlying, Currency.getInstance(currency), me, party, optionType)
+        val state = OptionState(Amount(amount.toLong() * 100, Currency.getInstance(currency)), expiry, underlying, me, party, optionType)
         // Start the OptionIssueFlow. We block and waits for the flow to return.
-        try {
+        return try {
             val result = rpcOps.startFlowDynamic(OptionIssueFlow.Initiator::class.java, state).returnValue.get()
             // Return the response.
-            return Response
+            Response
                     .status(Response.Status.CREATED)
                     .entity("Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.single()}")
                     .build()
             // For the purposes of this demo app, we do not differentiate by exception type.
         } catch (e: Exception) {
-            return Response
+            Response
                     .status(Response.Status.BAD_REQUEST)
                     .entity(e.message)
                     .build()

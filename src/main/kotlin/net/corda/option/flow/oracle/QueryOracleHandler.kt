@@ -13,7 +13,7 @@ import net.corda.option.service.Oracle
 
 /** Called by the oracle to provide a stock's spot price to a client. */
 @InitiatedBy(QueryOracle::class)
-class QueryOracleHandler(val counterpartySession: FlowSession) : FlowLogic<Unit>() {
+class QueryOracleHandler(private val counterpartySession: FlowSession) : FlowLogic<Unit>() {
     companion object {
         object RECEIVING : ProgressTracker.Step("Received stock to provide the spot price for.")
         object RETRIEVING : ProgressTracker.Step("Retrieving the spot price.")

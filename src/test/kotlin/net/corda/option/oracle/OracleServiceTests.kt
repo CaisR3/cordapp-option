@@ -5,9 +5,7 @@ import net.corda.core.contracts.StateAndContract
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
-import net.corda.option.OptionType
-import net.corda.option.SpotPrice
-import net.corda.option.Stock
+import net.corda.option.*
 import net.corda.option.contract.OptionContract
 import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.service.Oracle
@@ -25,7 +23,7 @@ import kotlin.test.assertNotEquals
 class OracleServiceTests : TestDependencyInjectionBase() {
     private val dummyServices = MockServices(listOf("net.corda.option.contract"), CHARLIE_KEY)
     private val oracle = Oracle(dummyServices)
-    private val stock = Stock("IBM", Instant.parse("2017-07-03T10:15:30.00Z"))
+    private val stock = Stock(COMPANY_1, DUMMY_OPTION_DATE)
 
     @Test
     fun `successful query`() {
@@ -78,10 +76,9 @@ class OracleServiceTests : TestDependencyInjectionBase() {
 
     }
 
-    fun getOption(): OptionState = OptionState(
-            strike = 10.DOLLARS,
-            expiry = TEST_TX_TIME + 30.days,
-            currency = Currency.getInstance("USD"),
+    private fun getOption(): OptionState = OptionState(
+            strikePrice = 10.DOLLARS,
+            expiryDate = TEST_TX_TIME + 30.days,
             underlyingStock = "IBM",
             issuer = MEGA_CORP,
             owner = MEGA_CORP,

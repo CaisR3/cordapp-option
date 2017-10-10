@@ -1,10 +1,9 @@
-package net.corda.option.pricing
+package net.corda.option.pricingmodel
 
-import net.corda.option.pricingmodel.BlackScholes
 import org.junit.Test
 import kotlin.test.assertEquals
 
-class ModelTests {
+class PricingModelTests {
 
     @Test
     fun blackScholesPricingModelReturnsCorrectPremiumForOutTheMoneyCallOption() {

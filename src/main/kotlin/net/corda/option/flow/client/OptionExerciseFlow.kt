@@ -10,7 +10,7 @@ import net.corda.core.flows.StartableByRPC
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
-import net.corda.option.DEMO_INSTANT
+import net.corda.option.DUMMY_OPTION_DATE
 import net.corda.option.ORACLE_NAME
 import net.corda.option.Stock
 import net.corda.option.contract.IOUContract
@@ -21,16 +21,21 @@ import java.time.Duration
 import java.time.Instant
 import java.util.function.Predicate
 
-// TODO: Describe this flow.
 object OptionExerciseFlow {
 
+    /**
+     * Exercises the option to convert it into an IOU against the issuer. The value of the IOU is equal to the moneyness of
+     * the option at the time of exercise.
+     *
+     * @property linearId the ID of the option to be exercised.
+     */
     @InitiatingFlow
     @StartableByRPC
-    class Initiator(val linearId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
+    class Initiator(private val linearId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
         companion object {
             object SET_UP : ProgressTracker.Step("Initialising flow.")
             object RETRIEVING_THE_INPUTS : ProgressTracker.Step("We retrieve the option to exercise from the vault.")
-            object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the Nth prime.")
+            object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the current spot price.")
             object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
             object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
             object WE_SIGN : ProgressTracker.Step("signing transaction.")
@@ -59,14 +64,12 @@ object OptionExerciseFlow {
             require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner"}
 
             progressTracker.currentStep = QUERYING_THE_ORACLE
-            val stockToQueryPriceOf = Stock(inputState.underlyingStock, DEMO_INSTANT)
+            val stockToQueryPriceOf = Stock(inputState.underlyingStock, DUMMY_OPTION_DATE)
             val (spotPrice, _) = subFlow(QueryOracle(oracle, stockToQueryPriceOf))
 
             progressTracker.currentStep = BUILDING_THE_TX
-            val outputOptionState = inputState.exercise(spotPrice.value)
-            val profit = OptionContract.calculateMoneyness(outputOptionState.strike, outputOptionState.spotPrice, outputOptionState.optionType)
-            // TODO: Establish how to link the output IOU to the output option. Re-using the linearId will cause issues.
-            val iouState = IOUState(profit, inputState.owner, inputState.issuer)
+            val profit = OptionState.calculateMoneyness(inputState.strikePrice, spotPrice.value, inputState.optionType)
+            val iouState = IOUState(profit, inputState.owner, inputState.issuer, linearId = inputState.linearId)
 
             val issueCommand = Command(IOUContract.Commands.Issue(), inputState.owner.owningKey)
             // By listing the oracle here, we make the oracle a required signer.
@@ -76,7 +79,6 @@ object OptionExerciseFlow {
             val builder = TransactionBuilder(notary)
                     .setTimeWindow(Instant.now(), Duration.ofSeconds(60))
                     .addInputState(stateAndRef)
-                    .addOutputState(outputOptionState, OptionContract.OPTION_CONTRACT_ID)
                     .addOutputState(iouState, IOUContract.IOU_CONTRACT_ID)
                     .addCommand(exerciseCommand)
                     .addCommand(issueCommand)

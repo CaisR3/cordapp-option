@@ -5,20 +5,56 @@ import net.corda.core.contracts.LinearState
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.Party
 import net.corda.option.OptionType
+import net.corda.option.RISK_FREE_RATE
+import net.corda.option.pricingmodel.BlackScholes
 import java.time.Instant
 import java.util.*
 
+/**
+ * Models an option contract.
+ *
+ * @property strikePrice price at which the [underlyingStock] can be purchased or sold.
+ * @property expiryDate time after which option cannot be exercised.
+ * @property underlyingStock the stock that the option allows you to buy or sell.
+ * @property issuer the entity who agrees to buy or sell the underlying from the option's owner.
+ * @property owner the current owner of the option.
+ * @property optionType either CALL (option to buy the stock at the strike price) or PUT (option to sell the stock at
+ *   the strike price).
+ * @property spotPriceAtPurchase price at which the option was purchased.
+ */
 data class OptionState(
-        val strike: Amount<Currency>,
-        val expiry: Instant,
+        val strikePrice: Amount<Currency>,
+        val expiryDate: Instant,
         val underlyingStock: String,
-        val currency: Currency,
         val issuer: Party,
         val owner: Party,
         val optionType: OptionType,
-        var spotPrice: Amount<Currency> = Amount(0, strike.token),
-        val exercised: Boolean = false,
+        var spotPriceAtPurchase: Amount<Currency> = Amount(0, strikePrice.token),
         override val linearId: UniqueIdentifier = UniqueIdentifier()) : LinearState {
+
+    companion object {
+        fun calculateMoneyness(strike: Amount<Currency>, spot: Amount<Currency>, optionType: OptionType): Amount<Currency> {
+            val zeroAmount = Amount.zero(spot.token)
+            when {
+                optionType == OptionType.CALL -> {
+                    if (strike >= spot)
+                        return zeroAmount
+                    return spot - strike
+                }
+                spot >= strike -> return zeroAmount
+                else -> return strike - spot
+            }
+        }
+
+        fun calculatePrice(optionState: OptionState, volatility: Double): Long {
+            val blackScholes = BlackScholes(optionState.spotPriceAtPurchase.quantity.toDouble(), optionState.strikePrice.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility)
+            if (optionState.optionType == OptionType.CALL)
+            {
+                return blackScholes.BSCall().toLong() * 100
+            }
+            return blackScholes.BSPut().toLong() * 100
+        }
+    }
 
     override val participants get() = listOf(owner, issuer)
 
@@ -28,16 +64,5 @@ data class OptionState(
      */
     fun withNewOwner(newOwner: Party) = copy(owner = newOwner)
 
-    /**
-     * Creates a copy of the current state with exercised set to true and a new spot price.
-     */
-    fun exercise(newSpotPrice: Amount<Currency>) = copy(exercised = true, spotPrice = newSpotPrice)
-
-    /**
-     * Creates a copy of the current state with a different owner.
-     * Used when transferring the state.
-     */
-    infix fun `owned by`(owner: Party) = copy(owner = owner)
-
-    override fun toString() = "${this.optionType.name} option on ${this.underlyingStock} at strike ${this.strike} expiring on ${this.expiry}"
+    override fun toString() = "${this.optionType.name} option on ${this.underlyingStock} at strike ${this.strikePrice} expiring on ${this.expiryDate}"
 }

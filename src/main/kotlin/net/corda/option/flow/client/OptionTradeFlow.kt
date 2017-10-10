@@ -14,12 +14,17 @@ import net.corda.option.state.OptionState
 import java.time.Duration
 import java.time.Instant
 
-// TODO: Describe this flow.
 object OptionTradeFlow {
 
+    /**
+     * Transfers an option to a new owner. The existing owner gets no payment in return.
+     *
+     * @property linearId the ID of the option to be transferred.
+     * @property newOwner the owner the option is being transferred to.
+     */
     @InitiatingFlow
     @StartableByRPC
-    class Initiator(val linearId: UniqueIdentifier, val newOwner: Party) : FlowLogic<SignedTransaction>() {
+    class Initiator(private val linearId: UniqueIdentifier, private val newOwner: Party) : FlowLogic<SignedTransaction>() {
 
         override val progressTracker: ProgressTracker = tracker()
 
@@ -76,8 +81,7 @@ object OptionTradeFlow {
             val stx = subFlow(CollectSignaturesFlow(ptx, counterpartySessions, OTHERS_SIGN.childProgressTracker()))
 
             progressTracker.currentStep = FINALISING
-            // For now, we operate under the assumption that the issuer needs to sign all trade deals.
-            return subFlow(FinalityFlow(stx, setOf(inputState.issuer, inputState.owner, newOwner)))
+            return subFlow(FinalityFlow(stx))
         }
     }
 
