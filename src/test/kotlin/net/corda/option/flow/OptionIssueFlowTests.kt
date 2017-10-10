@@ -53,7 +53,6 @@ class OptionIssueFlowTests {
         val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
         oracle.internals.installCordaService(net.corda.option.service.Oracle::class.java)
         oracle.registerInitiatedFlow(QueryOracleHandler::class.java)
-        oracle.registerInitiatedFlow(SignHandler::class.java)
 
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)
@@ -138,6 +137,16 @@ class OptionIssueFlowTests {
         val recordedCash = cash.single().state.data
         assertEquals(recordedCash.amount.quantity, 900)
         assertEquals(recordedCash.amount.token.product, OPTION_CURRENCY)
+    }
+
+    @Test
+    fun `issue flow can only be run by the buyer`() {
+        issueCashToBuyer()
+        val option = createOption(issuer, buyer)
+        val flow = OptionIssueFlow.Initiator(option)
+        val future = issuerNode.services.startFlow(flow).resultFuture
+        mockNet.runNetwork()
+        assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
 
     @Test

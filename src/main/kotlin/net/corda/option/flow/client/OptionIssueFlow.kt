@@ -59,6 +59,9 @@ object OptionIssueFlow {
             // In Corda v1.0, we identify oracles we want to use by name.
             val oracle = serviceHub.firstIdentityByName(ORACLE_NAME)
 
+            // This flow can only be called by the option's current owner.
+            require(optionState.owner == ourIdentity) { "Option issue flow must be initiated by the current buyer."}
+
             progressTracker.currentStep = QUERYING_THE_ORACLE
             val stockToCalculatePriceAndVolatilityOf = Stock(optionState.underlyingStock, DUMMY_OPTION_DATE)
             val (spotPrice, volatility) = subFlow(QueryOracle(oracle, stockToCalculatePriceAndVolatilityOf))

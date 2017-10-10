@@ -60,8 +60,9 @@ object OptionExerciseFlow {
             progressTracker.currentStep = RETRIEVING_THE_INPUTS
             val stateAndRef = serviceHub.getStateAndRefByLinearId<OptionState>(linearId)
             val inputState = stateAndRef.state.data
+
             // This flow can only be called by the option's current owner.
-            require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner"}
+            require(inputState.owner == ourIdentity) { "Option exercise flow must be initiated by the current owner."}
 
             progressTracker.currentStep = QUERYING_THE_ORACLE
             val stockToQueryPriceOf = Stock(inputState.underlyingStock, DUMMY_OPTION_DATE)
