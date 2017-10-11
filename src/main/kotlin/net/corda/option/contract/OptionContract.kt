@@ -6,6 +6,7 @@ import net.corda.finance.contracts.asset.Cash
 import net.corda.option.SpotPrice
 import net.corda.option.Volatility
 import net.corda.option.state.OptionState
+import java.time.Duration
 
 open class OptionContract : Contract {
     companion object {
@@ -20,60 +21,125 @@ open class OptionContract : Contract {
         when (command.value) {
             is Commands.Issue -> {
                 requireThat {
-                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
+                    // Constraints on the "shape" of the transaction.
                     "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
-                    "No other inputs are consumed" using (tx.inputs.size == 1)
-                    "An OptionState is created on the ledger" using (tx.outputsOfType<OptionState>().size == 1)
-                    "The Cash.State is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "A Cash.State output is created" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "An OptionState output is created" using (tx.outputsOfType<OptionState>().size == 1)
+                    "No other states are consumed" using (tx.inputs.size == 1)
                     "No other states are created" using (tx.outputs.size == 2)
-                    "Option issuances must be timestamped" using (tx.timeWindow?.untilTime != null)
+                    "Option issuances must be timestamped" using (tx.timeWindow != null)
+                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
+                    val oracleCmd = tx.commands.requireSingleCommand<OptionContract.OracleCommand>()
 
-                    val optionOutput = tx.outputsOfType<OptionState>().single()
-                    val time = tx.timeWindow!!.untilTime!!
-                    "The strike must be non-negative" using (optionOutput.strikePrice.quantity > 0)
-                    "The expiry date is not in the past" using (time < optionOutput.expiryDate)
+                    // Constraints on the contents of the transaction's components.
+                    val option = tx.outputsOfType<OptionState>().single()
+                    val cashInput = tx.inputsOfType<Cash.State>().single()
+                    val cashOutput = tx.outputsOfType<Cash.State>().single()
+                    val timeWindow = tx.timeWindow!!
+                    val premium = OptionState.calculatePremium(option, oracleCmd.value.volatility)
 
-                    "The issue transaction is signed by the issuer" using (optionOutput.issuer.owningKey in command.signers)
-                    "The issue transaction is signed by the owner" using (optionOutput.owner.owningKey in command.signers)
+                    "The strike price must be non-negative" using (option.strikePrice.quantity > 0)
+                    "The expiry date is not in the past" using (timeWindow.untilTime!! < option.expiryDate)
+                    "The option is not exercised" using (!option.exercised)
+                    "The exercised-on date is null" using (option.exercisedOnDate == null)
+                    "The spot price at purchase matches the oracle's data" using
+                            (option.spotPriceAtPurchase == oracleCmd.value.spotPrice.value)
+
+                    "The amount of cash transferred matches the premium" using
+                            (premium == cashInput.amount.withoutIssuer())
+                    "The cash input is owned by the option's owner" using
+                            (cashInput.owner == option.owner)
+                    "The cash output is owned by the option's issuer" using
+                            (cashOutput.owner == option.issuer)
+
+                    "The time-window is no longer than 120 seconds" using
+                            (Duration.between(timeWindow.fromTime, timeWindow.untilTime) <= Duration.ofSeconds(120))
+
+                    // Constraints on the required signers.
+                    "The issue command requires the issuer's signature" using (option.issuer.owningKey in command.signers)
+                    "The issue command requires the owner's signature" using (option.owner.owningKey in command.signers)
+                    // We can't check for the presence of the oracle as a required signer, as their identity is not
+                    // included in the transaction. We check for the oracle as a required signer in the flow instead.
+
+                    // We delegate some checks to the Cash contract:
+                    // - Whether the input cash's owner has signed
+                    // - Whether the amount of cash in matches the amount of cash out
                 }
             }
 
             is Commands.Trade -> {
                 requireThat {
-                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
+                    // Constraints on the "shape" of the transaction.
                     "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
-                    "An OptionState is consumed" using (tx.inputsOfType<OptionState>().size == 1)
-                    "No other inputs are consumed" using (tx.inputs.size == 2)
-                    "A new OptionState is created" using (tx.outputsOfType<OptionState>().size == 1)
-                    "The Cash.State is transferred" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "A Cash.State output is created" using (tx.outputsOfType<Cash.State>().size == 1)
+                    "An OptionState input is consumed" using (tx.outputsOfType<OptionState>().size == 1)
+                    "An OptionState output is created" using (tx.outputsOfType<OptionState>().size == 1)
+                    "No other states are consumed" using (tx.inputs.size == 2)
                     "No other states are created" using (tx.outputs.size == 2)
-                    "Option trades must be timestamped" using (tx.timeWindow?.untilTime != null)
+                    "Option issuances must be timestamped" using (tx.timeWindow != null)
+                    tx.commands.requireSingleCommand<Cash.Commands.Move>()
+                    val oracleCmd = tx.commands.requireSingleCommand<OptionContract.OracleCommand>()
 
-                    val input = tx.inputsOfType<OptionState>().single()
-                    val output = tx.outputsOfType<OptionState>().single()
-                    "Only the owner property may change." using (input.copy(owner = output.owner) == output)
-                    "The owner property must change." using (input.owner != output.owner)
+                    // Constraints on the contents of the transaction's components.
+                    val inputOption = tx.inputsOfType<OptionState>().single()
+                    val outputOption = tx.outputsOfType<OptionState>().single()
+                    val cashInput = tx.inputsOfType<Cash.State>().single()
+                    val cashOutput = tx.outputsOfType<Cash.State>().single()
+                    val timeWindow = tx.timeWindow!!
+                    val premium = OptionState.calculatePremium(outputOption, oracleCmd.value.volatility)
 
-                    "The trade is signed by the current owner of the option" using (input.owner.owningKey in command.signers)
-                    "The trade is signed by the new owner of the option" using (output.owner.owningKey in command.signers)
+                    "The owner has changed" using (inputOption.owner != outputOption.owner)
+                    "The spot price at purchase matches the oracle's data" using
+                            (outputOption.spotPriceAtPurchase == oracleCmd.value.spotPrice.value)
+                    "The options are otherwise identical" using
+                            (inputOption == outputOption.copy(owner = inputOption.owner, spotPriceAtPurchase = inputOption.spotPriceAtPurchase))
+
+                    "The amount of cash transferred matches the premium" using
+                            (premium == cashInput.amount.withoutIssuer())
+                    "The cash input is owned by the option's new owner" using
+                            (cashInput.owner == outputOption.owner)
+                    "The cash output is owned by the option's old owner" using
+                            (cashOutput.owner == inputOption.owner)
+
+                    "The time-window is no longer than 120 seconds" using
+                            (Duration.between(timeWindow.fromTime, timeWindow.untilTime) <= Duration.ofSeconds(120))
+
+                    // Constraints on the required signers.
+                    "The transfer command requires the old owner's signature" using (inputOption.owner.owningKey in command.signers)
+                    "The transfer command requires the new owner's signature" using (outputOption.owner.owningKey in command.signers)
                 }
             }
 
             is Commands.Exercise -> {
                 requireThat {
+                    // Constraints on the "shape" of the transaction.
                     "An OptionState is consumed" using (tx.inputsOfType<OptionState>().size == 1)
                     "No other inputs are consumed" using (tx.inputs.size == 1)
                     "A new OptionState is created" using (tx.outputsOfType<OptionState>().size == 1)
                     "No other states are created" using (tx.outputs.size == 1)
                     "Exercises of options must be timestamped" using (tx.timeWindow?.fromTime != null)
 
+                    // Constraints on the contents of the transaction's components.
                     val input = tx.inputsOfType<OptionState>().single()
                     val output = tx.outputsOfType<OptionState>().single()
+                    val timeWindow = tx.timeWindow!!
 
-                    "The option is being exercised before maturity" using (tx.timeWindow!!.untilTime!! <= input.expiryDate)
+                    "The input option is not exercised" using (!input.exercised)
+                    "The input option doesn't have an exercised-on date" using (input.exercisedOnDate == null)
                     "The output option is exercised" using (output.exercised)
+                    "The output option has an exercised-on date" using (output.exercisedOnDate != null)
+                    "The options are otherwise identical" using
+                            (input == output.copy(exercised = false, exercisedOnDate = null))
 
-                    "Exercising the option is signed by the current owner of the option" using (input.owner.owningKey in command.signers)
+                    "The option is being exercised before maturity" using
+                            (tx.timeWindow!!.untilTime!! <= input.expiryDate)
+                    "The output option's exercise data is within the time-window" using
+                            (output.exercisedOnDate!! in timeWindow)
+                    "The time-window is no longer than 120 seconds" using
+                            (Duration.between(timeWindow.fromTime, timeWindow.untilTime) <= Duration.ofSeconds(120))
+
+                    // Constraints on the required signers.
+                    "The exercise command requires the owner's signature" using (input.owner.owningKey in command.signers)
                 }
             }
 
@@ -82,15 +148,12 @@ open class OptionContract : Contract {
     }
 
     interface Commands : CommandData {
-
-        interface OracleCommands {
-            val spot: SpotPrice
-            val volatility: Volatility
-        }
-
-        class Issue(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
-        class Trade(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
+        class Issue : TypeOnlyCommandData(), Commands
+        class Trade : TypeOnlyCommandData(), Commands
         class Exercise : TypeOnlyCommandData(), Commands
-        class Redeem(override val spot: SpotPrice, override val volatility: Volatility) : OracleCommands, Commands
+        // TODO: Do not delete. Will be used in the implementation of the redeem flow.
+        class Redeem : TypeOnlyCommandData(), Commands
     }
+
+    class OracleCommand(val spotPrice: SpotPrice, val volatility: Volatility) : CommandData
 }

@@ -6,7 +6,6 @@ import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.messaging.vaultQueryBy
-import net.corda.core.utilities.days
 import net.corda.core.utilities.getOrThrow
 import net.corda.finance.contracts.asset.Cash
 import net.corda.option.OptionType
@@ -15,7 +14,6 @@ import net.corda.option.flow.client.OptionIssueFlow
 import net.corda.option.flow.client.OptionTradeFlow
 import net.corda.option.flow.client.SelfIssueCashFlow
 import net.corda.option.state.OptionState
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.*
@@ -60,7 +58,7 @@ class OptionApi(val rpcOps: CordaRPCOps) {
     }
 
     /**
-     * Displays all Option states that exist in the node's vault.
+     * Displays all option states that exist in the node's vault.
      */
     @GET
     @Path("options")
@@ -114,41 +112,7 @@ class OptionApi(val rpcOps: CordaRPCOps) {
     }
 
     /**
-     * Initiates a flow to agree a default option between two parties (for testing)
-     */
-    @GET
-    @Path("issue-test-option")
-    fun defaultIssueOption(): Response {
-        val amount = 10
-        val currency = "USD"
-        val expiry = Instant.now() + 30.days
-        val underlying = "IBM"
-        val counterparty = CordaX500Name("NodeB", "New York", "US")
-        val optionType = OptionType.PUT
-
-        // Get party objects for myself and the counterparty.
-        val party = rpcOps.wellKnownPartyFromX500Name(counterparty) ?: throw IllegalArgumentException("Unknown party name.")
-        // Create a new Option state using the parameters given.
-        val state = OptionState(Amount(amount.toLong() * 100, Currency.getInstance(currency)), expiry, underlying, me, party, optionType)
-        // Start the OptionIssueFlow. We block and waits for the flow to return.
-        return try {
-            val result = rpcOps.startFlowDynamic(OptionIssueFlow.Initiator::class.java, state).returnValue.get()
-            // Return the response.
-            Response
-                    .status(Response.Status.CREATED)
-                    .entity("Transaction id ${result.id} committed to ledger.\n${result.tx.outputs.single()}")
-                    .build()
-            // For the purposes of this demo app, we do not differentiate by exception type.
-        } catch (e: Exception) {
-            Response
-                    .status(Response.Status.BAD_REQUEST)
-                    .entity(e.message)
-                    .build()
-        }
-    }
-
-    /**
-     * Tranfers an Option specified by transaction id to a new party.
+     * Tranfers an option specified by transaction ID to a new party.
      */
     @GET
     @Path("trade-option")
@@ -170,7 +134,7 @@ class OptionApi(val rpcOps: CordaRPCOps) {
     }
 
     /**
-     * Settles an Option. Requires cash in the right currency to be able to settle.
+     * Settles an option. Requires cash in the right currency to be able to settle.
      */
     @GET
     @Path("exercise-option")
@@ -189,7 +153,7 @@ class OptionApi(val rpcOps: CordaRPCOps) {
     }
 
     /**
-     * Helper end-point to issue some cash to ourselves.
+     * Helper end-point to issue ourselves some cash.
      */
     @GET
     @Path("self-issue-cash")

@@ -6,8 +6,12 @@ import net.corda.core.node.ServiceHub
 import net.corda.core.node.services.CordaService
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.transactions.FilteredTransaction
-import net.corda.option.*
+import net.corda.option.KNOWN_SPOTS
+import net.corda.option.KNOWN_VOLATILITIES
+import net.corda.option.SpotPrice
+import net.corda.option.Volatility
 import net.corda.option.contract.OptionContract
+import java.time.Instant
 
 /**
  *  We sub-class 'SingletonSerializeAsToken' to ensure that instances of this class are never serialised by Kryo. When
@@ -29,44 +33,40 @@ class Oracle(val services: ServiceHub) : SingletonSerializeAsToken() {
     private val knownVolatilities = KNOWN_VOLATILITIES
 
     /** Returns spot for a given stock. */
-    fun querySpot(stock: Stock): SpotPrice {
-        return knownSpots.find { it.stock == stock } ?: throw IllegalArgumentException("Unknown spot.")
+    fun querySpot(stock: String, atTime: Instant): SpotPrice {
+        return knownSpots.find { it.stock == stock && it.atTime == atTime } ?: throw IllegalArgumentException("Unknown spot.")
     }
 
     /** Returns volatility for a given stock. */
-    fun queryVolatility(stock: Stock): Volatility {
-        return knownVolatilities.find { it.stock == stock } ?: throw IllegalArgumentException("Unknown volatility.")
+    fun queryVolatility(stock: String, atTime: Instant): Volatility {
+        return knownVolatilities.find { it.stock == stock && it.atTime == atTime } ?: throw IllegalArgumentException("Unknown volatility.")
     }
 
     /**
      * Signs over a transaction if the specified spot price and volatility are correct.
      * This function takes a filtered transaction which is a partial Merkle tree. Any parts of the transaction which
      * the oracle doesn't need to see in order to verify the correctness of the nth prime have been removed. In this
-     * case, all but the [OptionContract.Commands.OracleCommands] commands have been removed. If the spot price and
+     * case, all but the [OptionContract.OracleCommand] commands have been removed. If the spot price and
      * volatility are correct then the oracle signs over the Merkle root (the hash) of the transaction.
      */
     fun sign(ftx: FilteredTransaction): TransactionSignature {
         // Is the partial Merkle tree valid?
         ftx.verify()
 
-        /** Returns true if the component is an Redeem command that:
-         *  - States the correct price
+        /** Returns true if the component is an OracleCommand that:
+         *  - States the correct price and volatility
          *  - Has the oracle listed as a signer
          */
-        fun isCommandWithCorrectPriceAndVolatilityAndIAmSigner(elem: Any): Boolean {
-            return when (elem) {
-                is Command<*> -> {
-                    if (elem.value is OptionContract.Commands.OracleCommands) {
-                        val cmdData = elem.value as OptionContract.Commands.OracleCommands
-                        myKey in elem.signers
-                                && querySpot(cmdData.spot.stock) == cmdData.spot
-                                && queryVolatility(cmdData.spot.stock) == cmdData.volatility
-                    } else {
-                        false
-                    }
-                }
-                else -> false
+        fun isCommandWithCorrectPriceAndVolatilityAndIAmSigner(elem: Any) = when {
+            elem is Command<*> && elem.value is OptionContract.OracleCommand -> {
+                val cmdData = elem.value as OptionContract.OracleCommand
+                val cmdSpotPrice = cmdData.spotPrice
+                val cmdVolatility = cmdData.volatility
+                myKey in elem.signers
+                        && querySpot(cmdSpotPrice.stock, cmdSpotPrice.atTime) == cmdData.spotPrice
+                        && queryVolatility(cmdVolatility.stock, cmdVolatility.atTime) == cmdData.volatility
             }
+            else -> false
         }
 
         // Is it a Merkle tree we are willing to sign over?

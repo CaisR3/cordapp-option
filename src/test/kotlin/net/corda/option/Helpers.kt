@@ -9,7 +9,7 @@ import java.time.Instant
 fun createOption(issuer: Party, owner: Party) = OptionState(
         strikePrice = Amount(10, OPTION_CURRENCY),
         expiryDate = Instant.now() + 30.days,
-        underlyingStock = COMPANY_STOCK_1.company,
+        underlyingStock = COMPANY_STOCK_1,
         optionType = OptionType.PUT,
         issuer = issuer,
         owner = owner,
@@ -17,10 +17,10 @@ fun createOption(issuer: Party, owner: Party) = OptionState(
 )
 
 fun createBadOption(issuer: Party, owner: Party) = OptionState(
-        // An option with a strike price of zero is invalid.
         strikePrice = Amount(10, OPTION_CURRENCY),
+        // An option with an expiry date in the past is invalid.
         expiryDate = Instant.now() - 30.days,
-        underlyingStock = COMPANY_STOCK_1.company,
+        underlyingStock = COMPANY_STOCK_1,
         optionType = OptionType.PUT,
         issuer = issuer,
         owner = owner,

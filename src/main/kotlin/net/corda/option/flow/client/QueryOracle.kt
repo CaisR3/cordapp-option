@@ -6,14 +6,14 @@ import net.corda.core.flows.InitiatingFlow
 import net.corda.core.identity.Party
 import net.corda.core.utilities.unwrap
 import net.corda.option.SpotPrice
-import net.corda.option.Stock
 import net.corda.option.Volatility
+import java.time.Instant
 
 /** Called by the client to request a stock's spot price and volatility at a point in time from an oracle. */
 @InitiatingFlow
-class QueryOracle(val oracle: Party, val stock: Stock) : FlowLogic<Pair<SpotPrice, Volatility>>() {
+class QueryOracle(private val oracle: Party, private val stock: String, private val atTime: Instant) : FlowLogic<Pair<SpotPrice, Volatility>>() {
     @Suspendable override fun call(): Pair<SpotPrice, Volatility> {
         val oracleSession = initiateFlow(oracle)
-        return oracleSession.sendAndReceive<Pair<SpotPrice, Volatility>>(stock).unwrap { it }
+        return oracleSession.sendAndReceive<Pair<SpotPrice, Volatility>>(Pair(stock, atTime)).unwrap { it }
     }
 }

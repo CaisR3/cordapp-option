@@ -13,7 +13,7 @@ import net.corda.option.service.Oracle
 
 /** Called by the oracle to provide a signature over a transaction. */
 @InitiatedBy(RequestOracleSig::class)
-class SignHandler(private val counterpartySession: FlowSession) : FlowLogic<Unit>() {
+class RequestOracleSigHandler(private val counterpartySession: FlowSession) : FlowLogic<Unit>() {
     companion object {
         object RECEIVING : ProgressTracker.Step("Received filtered transaction to sign over.")
         object SIGNING : ProgressTracker.Step("Signing over the filtered transaction.")

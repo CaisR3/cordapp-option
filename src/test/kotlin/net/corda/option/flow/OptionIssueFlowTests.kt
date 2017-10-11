@@ -12,14 +12,11 @@ import net.corda.finance.contracts.asset.Cash
 import net.corda.finance.flows.CashIssueFlow
 import net.corda.finance.schemas.CashSchemaV1
 import net.corda.node.internal.StartedNode
-import net.corda.option.OPTION_CURRENCY
-import net.corda.option.ORACLE_NAME
+import net.corda.option.*
 import net.corda.option.contract.OptionContract
-import net.corda.option.createBadOption
-import net.corda.option.createOption
 import net.corda.option.flow.client.OptionIssueFlow
 import net.corda.option.flow.oracle.QueryOracleHandler
-import net.corda.option.flow.oracle.SignHandler
+import net.corda.option.flow.oracle.RequestOracleSigHandler
 import net.corda.option.state.OptionState
 import net.corda.testing.node.MockNetwork
 import net.corda.testing.node.MockNetwork.MockNode
@@ -35,9 +32,11 @@ class OptionIssueFlowTests {
     private lateinit var mockNet: MockNetwork
     private lateinit var issuerNode: StartedNode<MockNode>
     private lateinit var buyerNode: StartedNode<MockNode>
+    private lateinit var oracleNode: StartedNode<MockNode>
 
     private lateinit var issuer: Party
     private lateinit var buyer: Party
+    private lateinit var oracle: Party
 
     @Before
     fun setup() {
@@ -47,18 +46,20 @@ class OptionIssueFlowTests {
         val nodes = mockNet.createSomeNodes(2)
         issuerNode = nodes.partyNodes[0]
         buyerNode = nodes.partyNodes[1]
+        oracleNode = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
 
-        issuer = issuerNode.info.legalIdentities.first()
-        buyer = buyerNode.info.legalIdentities.first()
-
-        val oracle = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
-        oracle.internals.installCordaService(net.corda.option.service.Oracle::class.java)
-        oracle.registerInitiatedFlow(QueryOracleHandler::class.java)
+        oracleNode.internals.installCordaService(net.corda.option.service.Oracle::class.java)
+        oracleNode.registerInitiatedFlow(QueryOracleHandler::class.java)
+        oracleNode.registerInitiatedFlow(RequestOracleSigHandler::class.java)
 
         nodes.partyNodes.forEach {
             it.registerInitiatedFlow(OptionIssueFlow.Responder::class.java)
             it.internals.registerCustomSchemas(setOf(CashSchemaV1))
         }
+
+        issuer = issuerNode.info.legalIdentities.first()
+        buyer = buyerNode.info.legalIdentities.first()
+        oracle = oracleNode.info.legalIdentities.first()
 
         mockNet.runNetwork()
     }
@@ -93,13 +94,17 @@ class OptionIssueFlowTests {
             assertEquals(1, ltx.outputsOfType<OptionState>().size)
 
             // Two commands.
-            assertEquals(2, ltx.commands.size)
+            assertEquals(3, ltx.commands.size)
 
             // An OptionContract.Commands.Issue command with the correct attributes.
             val optionCmd = ltx.commandsOfType<OptionContract.Commands.Issue>().single()
-            listOf(issuer, buyer).forEach {
-                assert(optionCmd.signers.contains(it.owningKey))
-            }
+            assert(optionCmd.signers.containsAll(listOf(issuer.owningKey, buyer.owningKey)))
+
+            // An OptionContract.OracleCommand with the correct attributes.
+            val oracleCmd = ltx.commandsOfType<OptionContract.OracleCommand>().single()
+            assert(oracleCmd.signers.contains(oracle.owningKey))
+            assertEquals(KNOWN_SPOTS[0], oracleCmd.value.spotPrice)
+            assertEquals(KNOWN_VOLATILITIES[0], oracleCmd.value.volatility)
 
             // A Cash.Commands.Move command with the correct attributes.
             val cashCmd = ltx.commandsOfType<Cash.Commands.Move>().single()
@@ -108,7 +113,7 @@ class OptionIssueFlowTests {
     }
 
     @Test
-    fun `flow records the correct option in both parties' vaults`() {
+    fun `flow records the option in the vaults of the issuer and owner`() {
         issueCashToBuyer()
         val option = createOption(issuer, buyer)
         issueOptionToBuyer(option)

@@ -7,9 +7,9 @@ import net.corda.core.flows.FlowSession
 import net.corda.core.flows.InitiatedBy
 import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.unwrap
-import net.corda.option.Stock
 import net.corda.option.flow.client.QueryOracle
 import net.corda.option.service.Oracle
+import java.time.Instant
 
 /** Called by the oracle to provide a stock's spot price to a client. */
 @InitiatedBy(QueryOracle::class)
@@ -25,12 +25,12 @@ class QueryOracleHandler(private val counterpartySession: FlowSession) : FlowLog
     @Suspendable
     override fun call() {
         progressTracker.currentStep = RECEIVING
-        val stock = counterpartySession.receive<Stock>().unwrap { it }
+        val (stock, atTime) = counterpartySession.receive<Pair<String, Instant>>().unwrap { it }
 
         progressTracker.currentStep = RETRIEVING
         val spotPriceAndVolatility = try {
-            val spotPrice = serviceHub.cordaService(Oracle::class.java).querySpot(stock)
-            val volatility = serviceHub.cordaService(Oracle::class.java).queryVolatility(stock)
+            val spotPrice = serviceHub.cordaService(Oracle::class.java).querySpot(stock, atTime)
+            val volatility = serviceHub.cordaService(Oracle::class.java).queryVolatility(stock, atTime)
             Pair(spotPrice, volatility)
         } catch (e: Exception) {
             throw FlowException(e)

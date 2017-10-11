@@ -6,6 +6,7 @@ import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.Party
 import net.corda.option.OptionType
 import net.corda.option.RISK_FREE_RATE
+import net.corda.option.Volatility
 import net.corda.option.pricingmodel.BlackScholes
 import java.time.Instant
 import java.util.*
@@ -35,7 +36,7 @@ data class OptionState(
         override val linearId: UniqueIdentifier = UniqueIdentifier()) : LinearState {
 
     companion object {
-        // TODO: Do not delete. Will be used later.
+        // TODO: Do not delete. Will be used in the implementation of the redeem flow.
         fun calculateMoneyness(strike: Amount<Currency>, spot: Amount<Currency>, optionType: OptionType): Amount<Currency> {
             val zeroAmount = Amount.zero(spot.token)
             when {
@@ -49,13 +50,14 @@ data class OptionState(
             }
         }
 
-        fun calculatePremium(optionState: OptionState, volatility: Double): Long {
-            val blackScholes = BlackScholes(optionState.spotPriceAtPurchase.quantity.toDouble(), optionState.strikePrice.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility)
-            if (optionState.optionType == OptionType.CALL)
-            {
-                return blackScholes.BSCall().toLong() * 100
+        fun calculatePremium(optionState: OptionState, volatility: Volatility): Amount<Currency> {
+            val blackScholes = BlackScholes(optionState.spotPriceAtPurchase.quantity.toDouble(), optionState.strikePrice.quantity.toDouble(), RISK_FREE_RATE, 100.toDouble(), volatility.value)
+            val value = if (optionState.optionType == OptionType.CALL) {
+                blackScholes.BSCall().toLong() * 100
+            } else {
+                blackScholes.BSPut().toLong() * 100
             }
-            return blackScholes.BSPut().toLong() * 100
+            return Amount(value, optionState.strikePrice.token)
         }
     }
 
