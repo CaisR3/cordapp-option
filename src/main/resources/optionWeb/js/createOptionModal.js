@@ -1,9 +1,10 @@
 "use strict";
 
-angular.module('demoAppModule').controller('CreateOptionModalCtrl', function($http, $uibModalInstance, $uibModal, apiBaseURL, peers) {
+angular.module('demoAppModule').controller('CreateOptionModalCtrl', function($http, $uibModalInstance, $uibModal, apiBaseURL, peers, stocks) {
     const createOptionModal = this;
 
     createOptionModal.peers = peers;
+    createOptionModal.stocks = stocks;
     createOptionModal.optionTypes = ["CALL", "PUT"];
     createOptionModal.form = {};
     createOptionModal.formError = false;
@@ -19,7 +20,7 @@ angular.module('demoAppModule').controller('CreateOptionModalCtrl', function($ht
             const currency = createOptionModal.form.currency;
             const expiry = createOptionModal.form.expiry;
             const underlying = createOptionModal.form.underlying;
-            const party = createOptionModal.form.counterparty;
+            const issuer = createOptionModal.form.issuer;
             const optionType = createOptionModal.form.optionType;
 
             $uibModalInstance.close();
@@ -27,7 +28,7 @@ angular.module('demoAppModule').controller('CreateOptionModalCtrl', function($ht
             // We define the Option creation endpoint.
             const issueOptionEndpoint =
                 apiBaseURL +
-                `issue-option?strike=${strike}&currency=${currency}&expiry=${expiry}&underlying=${underlying}&counterparty=${party}&optionType=${optionType}`;
+                `issue-option?strike=${strike}&currency=${currency}&expiry=${expiry}&underlying=${underlying}&issuer=${issuer}&optionType=${optionType}`;
 
             // We hit the endpoint to create the Option and handle success/failure responses.
             $http.get(issueOptionEndpoint).then(
@@ -57,7 +58,7 @@ angular.module('demoAppModule').controller('CreateOptionModalCtrl', function($ht
 
     // Validates the Option.
     function invalidFormInput() {
-        return isNaN(createOptionModal.form.strike) || (createOptionModal.form.counterparty === undefined) || (createOptionModal.form.underlying === undefined)
+        return isNaN(createOptionModal.form.strike) || (createOptionModal.form.issuer === undefined) || (createOptionModal.form.underlying === undefined)
             || (createOptionModal.form.currency === undefined) || (createOptionModal.form.optionType === undefined);
         ;
     }

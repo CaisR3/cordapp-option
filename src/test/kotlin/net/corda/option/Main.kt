@@ -23,23 +23,27 @@ import net.corda.testing.driver.driver
  * 5. Run the "Debug CorDapp" remote debug run configuration.
  */
 fun main(args: Array<String>) {
-    driver(dsl = {
-        val user = User("user1", "test", permissions = setOf())
+    driver(
+            startNodesInProcess = true,
+            extraCordappPackagesToScan = listOf("net.corda.finance.contracts.asset"),
+            dsl = {
+                val user = User("user1", "test", permissions = setOf())
 
-        val (controller, nodeA, nodeB, nodeC, nodeD) = listOf(
-                startNode(providedName = CordaX500Name("Controller", "London", "GB"), advertisedServices = setOf(ServiceInfo(SimpleNotaryService.type))),
-                startNode(providedName = CordaX500Name("PartyA", "London", "GB"), rpcUsers = listOf(user)),
-                startNode(providedName = CordaX500Name("PartyB", "New York", "US"), rpcUsers = listOf(user)),
-                startNode(providedName = CordaX500Name("PartyC", "Paris" , "FR"), rpcUsers = listOf(user)),
-                startNode(providedName = CordaX500Name("PartyD", "New York", "US"), rpcUsers = listOf(user))
-        ).map { it.getOrThrow() }
+                // TODO: Re-add issuer, partyA
+                val (controller, partyB, oracle) = listOf(
+                        startNode(providedName = CordaX500Name("Controller", "London", "GB"), advertisedServices = setOf(ServiceInfo(SimpleNotaryService.type))),
+//                        startNode(providedName = CordaX500Name("Issuer", "London", "GB"), rpcUsers = listOf(user)),
+//                        startNode(providedName = CordaX500Name("PartyA", "New York", "US"), rpcUsers = listOf(user)),
+                        startNode(providedName = CordaX500Name("PartyB", "Paris", "FR"), rpcUsers = listOf(user)),
+                        startNode(providedName = CordaX500Name("Oracle", "New York", "US"), rpcUsers = listOf(user))
+                ).map { it.getOrThrow() }
 
-        startWebserver(controller)
-        startWebserver(nodeA)
-        startWebserver(nodeB)
-        startWebserver(nodeC)
-        startWebserver(nodeD)
+                startWebserver(controller)
+//                startWebserver(issuer)
+//                startWebserver(partyA)
+                startWebserver(partyB)
+                startWebserver(oracle)
 
-        waitForAllNodesToFinish()
-    }, useTestClock = true, isDebug = true)
+                waitForAllNodesToFinish()
+            }, useTestClock = true, isDebug = true)
 }

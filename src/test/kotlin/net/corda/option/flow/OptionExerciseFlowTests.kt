@@ -107,7 +107,7 @@ class OptionExerciseFlowTests {
         issueOptionToBuyer(option)
         exerciseOption()
 
-        // We check the recorded IOU in both vaults.
+        // We check the recorded option in both vaults.
         listOf(issuerNode, buyerNode).forEach { node ->
             val options = node.database.transaction {
                 node.services.vaultService.queryBy<OptionState>().states

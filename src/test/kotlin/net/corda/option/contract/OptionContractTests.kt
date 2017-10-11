@@ -2,8 +2,10 @@ package net.corda.option.contract
 
 import net.corda.finance.DOLLARS
 import net.corda.finance.contracts.asset.*
-import net.corda.option.*
+import net.corda.option.KNOWN_SPOTS
+import net.corda.option.KNOWN_VOLATILITIES
 import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
+import net.corda.option.createOption
 import net.corda.option.state.OptionState
 import net.corda.testing.*
 import org.junit.After

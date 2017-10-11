@@ -6,10 +6,12 @@ angular.module('demoAppModule', ['ui.bootstrap']).controller('DemoAppCtrl', func
 
     const apiBaseURL = "/api/option/";
 
-    // Retrieves the identity of this and other nodes.
+    // Retrieves the identity of this, the other nodes, and the stocks the oracle can provide prices for.
     let peers = [];
+    let stocks = [];
     $http.get(apiBaseURL + "me").then((response) => demoApp.thisNode = response.data.me);
     $http.get(apiBaseURL + "peers").then((response) => peers = response.data.peers);
+    $http.get(apiBaseURL + "stocks").then((response) => stocks = response.data.stocks);
 
     /** Displays the Option creation modal. */
     demoApp.openCreateOptionModal = () => {
@@ -19,26 +21,12 @@ angular.module('demoAppModule', ['ui.bootstrap']).controller('DemoAppCtrl', func
             controllerAs: 'createOptionModal',
             resolve: {
                 apiBaseURL: () => apiBaseURL,
-                peers: () => peers
+                peers: () => peers,
+                stocks: () => stocks
             }
         });
         // Ignores the modal result events.
         createOptionModal.result.then(() => {}, () => {});
-    };
-
-    /** Displays the Option request modal. */
-    demoApp.openRequestOptionModal = () => {
-        const requestOptionModal = $uibModal.open({
-            templateUrl: 'requestOptionModal.html',
-            controller: 'RequestOptionModalCtrl',
-            controllerAs: 'requestOptionModal',
-            resolve: {
-                apiBaseURL: () => apiBaseURL,
-                peers: () => peers
-            }
-        });
-        // Ignores the modal result events.
-        requestOptionModal.result.then(() => {}, () => {});
     };
 
     /** Displays the cash issuance modal. */
@@ -92,12 +80,8 @@ angular.module('demoAppModule', ['ui.bootstrap']).controller('DemoAppCtrl', func
         $http.get(apiBaseURL + "options").then((response) => demoApp.options =
             Object.keys(response.data).map((key) => response.data[key].state.data));
 
-        // Update the the list of IOUs.
-        $http.get(apiBaseURL + "ious").then((response) => demoApp.ious =
-            Object.keys(response.data).map((key) => response.data[key].state.data));
-
         // Update the cash balances.
-        $http.get(apiBaseURL + "cash-balances").then((response) => demoApp.cashBalances =
+        $http.get(apiBaseURL + "cash").then((response) => demoApp.cashBalances =
             response.data);
     }
 

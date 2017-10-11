@@ -53,7 +53,7 @@ object OptionIssueFlow {
 
         @Suspendable
         override fun call(): SignedTransaction {
-            require(optionState.owner == ourIdentity) { "Option issue flow must be initiated by the current buyer." }
+            require(optionState.owner == ourIdentity) { "Option issue flow must be initiated by the buyer." }
 
             progressTracker.currentStep = SET_UP
             val notary = serviceHub.firstNotary()

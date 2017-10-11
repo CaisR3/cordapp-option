@@ -123,7 +123,7 @@ object OptionTradeFlow {
 
             progressTracker.currentStep = ADDING_CASH_PAYMENT
             val optionPrice = OptionState.calculatePremium(inputOption, volatility)
-            Cash.generateSpend(serviceHub, builder, optionPrice, inputOption.issuer)
+            Cash.generateSpend(serviceHub, builder, optionPrice, inputOption.owner)
 
             progressTracker.currentStep = VERIFYING_THE_TX
             builder.verify(serviceHub)

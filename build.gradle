@@ -46,8 +46,6 @@ sourceSets {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
-    testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
-    testCompile "junit:junit:$junit_version"
 
     cordaCompile "net.corda:corda-core:$corda_release_version"
     cordaCompile "net.corda:corda-finance:$corda_release_version"
@@ -58,7 +56,11 @@ dependencies {
     cordaRuntime "net.corda:corda:$corda_release_version"
     cordaRuntime "net.corda:corda-webserver:$corda_release_version"
 
+    testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
+    testCompile "junit:junit:$junit_version"
     testCompile "net.corda:corda-node-driver:$corda_release_version"
+
+    cordapp "net.corda:corda-finance:$corda_release_version"
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -78,43 +80,41 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['build']) {
         advertisedServices = ["corda.notary.simple"]
         p2pPort 10002
         rpcPort 10003
-        webPort 10004
-        cordapps = []
+        cordapps = ["net.corda:corda-finance:$corda_release_version"]
     }
+//    node {
+//        name "O=Issuer,L=London,C=GB"
+//        advertisedServices = []
+//        p2pPort 10005
+//        rpcPort 10006
+//        webPort 10007
+//        cordapps = ["net.corda:corda-finance:$corda_release_version"]
+//        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+//    }
+//    node {
+//        name "O=PartyA,L=New York,C=US"
+//        advertisedServices = []
+//        p2pPort 10008
+//        rpcPort 10009
+//        webPort 10010
+//        cordapps = ["net.corda:corda-finance:$corda_release_version"]
+//        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+//    }
     node {
-        name "O=PartyA,L=London,C=GB"
-        advertisedServices = []
-        p2pPort 10005
-        rpcPort 10006
-        webPort 10007
-        cordapps = []
-        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
-    }
-    node {
-        name "O=PartyB,L=New York,C=US"
-        advertisedServices = []
-        p2pPort 10008
-        rpcPort 10009
-        webPort 10010
-        cordapps = []
-        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
-    }
-    node {
-        name "O=PartyC,L=Paris,C=FR"
+        name "O=PartyB,L=Paris,C=FR"
         advertisedServices = []
         p2pPort 10011
         rpcPort 10012
         webPort 10013
-        cordapps = []
+        cordapps = ["net.corda:corda-finance:$corda_release_version"]
         rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
     }
     node {
-        name "O=PartyD,L=New York,C=US"
+        name "O=Oracle,L=New York,C=US"
         advertisedServices = ["net.corda.option.stocks_oracle"]
         p2pPort 10014
         rpcPort 10015
-        webPort 10016
-        cordapps = []
+        cordapps = ["net.corda:corda-finance:$corda_release_version"]
         rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
     }
 }

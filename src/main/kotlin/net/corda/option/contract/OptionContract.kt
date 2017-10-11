@@ -3,6 +3,7 @@ package net.corda.option.contract
 import net.corda.core.contracts.*
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.finance.contracts.asset.Cash
+import net.corda.finance.utils.sumCashBy
 import net.corda.option.SpotPrice
 import net.corda.option.Volatility
 import net.corda.option.state.OptionState
@@ -22,19 +23,23 @@ open class OptionContract : Contract {
             is Commands.Issue -> {
                 requireThat {
                     // Constraints on the "shape" of the transaction.
-                    "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
-                    "A Cash.State output is created" using (tx.outputsOfType<Cash.State>().size == 1)
+
+                    // If cash states have to be combined/split into change, we may not have exactly one cash
+                    // input/output.
+                    val cashInputs = tx.inputsOfType<Cash.State>()
+                    val cashOutputs = tx.outputsOfType<Cash.State>()
+                    "Cash.State inputs are consumed" using (cashInputs.isNotEmpty())
+                    "Cash.State outputs are created" using (cashOutputs.isNotEmpty())
                     "An OptionState output is created" using (tx.outputsOfType<OptionState>().size == 1)
-                    "No other states are consumed" using (tx.inputs.size == 1)
-                    "No other states are created" using (tx.outputs.size == 2)
+                    "No other states are consumed" using (tx.inputs.size == cashInputs.size)
+                    "No other states are created" using (tx.outputs.size == (cashOutputs.size + 1))
                     "Option issuances must be timestamped" using (tx.timeWindow != null)
                     tx.commands.requireSingleCommand<Cash.Commands.Move>()
                     val oracleCmd = tx.commands.requireSingleCommand<OptionContract.OracleCommand>()
 
                     // Constraints on the contents of the transaction's components.
                     val option = tx.outputsOfType<OptionState>().single()
-                    val cashInput = tx.inputsOfType<Cash.State>().single()
-                    val cashOutput = tx.outputsOfType<Cash.State>().single()
+                    val cashTransferredToIssuer = tx.outputsOfType<Cash.State>().sumCashBy(option.issuer)
                     val timeWindow = tx.timeWindow!!
                     val premium = OptionState.calculatePremium(option, oracleCmd.value.volatility)
 
@@ -46,11 +51,7 @@ open class OptionContract : Contract {
                             (option.spotPriceAtPurchase == oracleCmd.value.spotPrice.value)
 
                     "The amount of cash transferred matches the premium" using
-                            (premium == cashInput.amount.withoutIssuer())
-                    "The cash input is owned by the option's owner" using
-                            (cashInput.owner == option.owner)
-                    "The cash output is owned by the option's issuer" using
-                            (cashOutput.owner == option.issuer)
+                            (premium == cashTransferredToIssuer.withoutIssuer())
 
                     "The time-window is no longer than 120 seconds" using
                             (Duration.between(timeWindow.fromTime, timeWindow.untilTime) <= Duration.ofSeconds(120))
@@ -63,19 +64,21 @@ open class OptionContract : Contract {
 
                     // We delegate some checks to the Cash contract:
                     // - Whether the input cash's owner has signed
-                    // - Whether the amount of cash in matches the amount of cash out
+                    // - Whether the value of cash inputs matches the value of cash outputs
                 }
             }
 
             is Commands.Trade -> {
                 requireThat {
                     // Constraints on the "shape" of the transaction.
-                    "A Cash.State input is consumed" using (tx.inputsOfType<Cash.State>().size == 1)
-                    "A Cash.State output is created" using (tx.outputsOfType<Cash.State>().size == 1)
+                    val cashInputs = tx.inputsOfType<Cash.State>()
+                    val cashOutputs = tx.outputsOfType<Cash.State>()
+                    "Cash.State inputs are consumed" using (cashInputs.isNotEmpty())
+                    "Cash.State outputs are created" using (cashOutputs.isNotEmpty())
                     "An OptionState input is consumed" using (tx.outputsOfType<OptionState>().size == 1)
                     "An OptionState output is created" using (tx.outputsOfType<OptionState>().size == 1)
-                    "No other states are consumed" using (tx.inputs.size == 2)
-                    "No other states are created" using (tx.outputs.size == 2)
+                    "No other states are consumed" using (tx.inputs.size == (cashInputs.size + 1))
+                    "No other states are created" using (tx.outputs.size == (cashOutputs.size + 1))
                     "Option issuances must be timestamped" using (tx.timeWindow != null)
                     tx.commands.requireSingleCommand<Cash.Commands.Move>()
                     val oracleCmd = tx.commands.requireSingleCommand<OptionContract.OracleCommand>()
@@ -83,8 +86,7 @@ open class OptionContract : Contract {
                     // Constraints on the contents of the transaction's components.
                     val inputOption = tx.inputsOfType<OptionState>().single()
                     val outputOption = tx.outputsOfType<OptionState>().single()
-                    val cashInput = tx.inputsOfType<Cash.State>().single()
-                    val cashOutput = tx.outputsOfType<Cash.State>().single()
+                    val cashTransferredToOldOwner = tx.outputsOfType<Cash.State>().sumCashBy(inputOption.owner)
                     val timeWindow = tx.timeWindow!!
                     val premium = OptionState.calculatePremium(outputOption, oracleCmd.value.volatility)
 
@@ -95,11 +97,7 @@ open class OptionContract : Contract {
                             (inputOption == outputOption.copy(owner = inputOption.owner, spotPriceAtPurchase = inputOption.spotPriceAtPurchase))
 
                     "The amount of cash transferred matches the premium" using
-                            (premium == cashInput.amount.withoutIssuer())
-                    "The cash input is owned by the option's new owner" using
-                            (cashInput.owner == outputOption.owner)
-                    "The cash output is owned by the option's old owner" using
-                            (cashOutput.owner == inputOption.owner)
+                            (premium == cashTransferredToOldOwner.withoutIssuer())
 
                     "The time-window is no longer than 120 seconds" using
                             (Duration.between(timeWindow.fromTime, timeWindow.untilTime) <= Duration.ofSeconds(120))

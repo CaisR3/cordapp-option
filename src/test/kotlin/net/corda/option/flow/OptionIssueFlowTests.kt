@@ -118,7 +118,7 @@ class OptionIssueFlowTests {
         val option = createOption(issuer, buyer)
         issueOptionToBuyer(option)
 
-        // We check the recorded IOU in both vaults.
+        // We check the recorded option in both vaults.
         listOf(issuerNode, buyerNode).forEach { node ->
             val options = node.database.transaction {
                 node.services.vaultService.queryBy<OptionState>().states
@@ -135,7 +135,7 @@ class OptionIssueFlowTests {
         val option = createOption(issuer, buyer)
         issueOptionToBuyer(option)
 
-        // We check the recorded IOU in both vaults.
+        // We check the recorded option in both vaults.
         val cash = issuerNode.database.transaction {
             issuerNode.services.vaultService.queryBy<Cash.State>().states
         }

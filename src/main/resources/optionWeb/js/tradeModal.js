@@ -15,13 +15,13 @@ angular.module('demoAppModule').controller('TradeModalCtrl', function ($http, $u
             tradeModal.formError = false;
 
             const id = tradeModal.id;
-            const party = tradeModal.form.counterparty;
+            const newOwner = tradeModal.form.newOwner;
 
             $uibModalInstance.close();
 
             const issueOptionEndpoint =
                 apiBaseURL +
-                `trade-option?id=${id}&party=${party}`;
+                `trade-option?id=${id}&newOwner=${newOwner}`;
 
             $http.get(issueOptionEndpoint).then(
                 (result) => tradeModal.displayMessage(result),
@@ -44,7 +44,7 @@ angular.module('demoAppModule').controller('TradeModalCtrl', function ($http, $u
     tradeModal.cancel = () => $uibModalInstance.dismiss();
 
     function invalidFormInput() {
-        return tradeModal.form.counterparty === undefined;
+        return tradeModal.form.newOwner === undefined;
     }
 });
 
