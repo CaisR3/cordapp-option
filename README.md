@@ -1,46 +1,59 @@
 ![Corda](https://www.corda.net/wp-content/uploads/2016/11/fg005_corda_b.png)
 
-# Option CorDapp Version 2
+# Option CorDapp
 
-This repo contains a CorDapp representing an OTC Equity Option. The following features have been added:
+This CorDapp allows nodes to issue, trade and exercise call and put options.
 
-* The code has been rebased to Corda V1.0
-* Nodes can self issue cash
-* Nodes can transfer options to other nodes
-* Node's can exercise options with payment settled in the form of an obligation
-* The web UI facilitates issuance, transferance and exercising of Options
+When issuing or trading an option, an oracle is used to ensure that the option is being exchanged for the correct 
+amount of cash, based on the oracle's knowledge of stock prices, volatility and the Black-Scholes model.
 
-# Assumptions
+The CorDapp is split into three modules:
 
-* The issuance cannot go into default
-* The option owner only signs the exercise transactions (therefore they cannot be blocked by the issuer)
-* In a real-world app, we would have to introduce some complexities to deal with the possibility of the issuer 
-  defaulting. Perhaps an encumbrance would be placed on some amount, e.g. in the case of issuing a PUT, it would be in 
-  the amount of the strike
+* Client: The flows required by non-oracle nodes to query the oracle and request their signature over a transaction 
+  including oracle data. Also includes a web front-end and a flow to self-issue cash
+* Oracle: The flows and services required by oracle nodes to respond to data and signing queries
+* Base: A collection of files that non-oracle and oracle nodes need to share, such as contract and state definitions
+
+There is also a series of tests under `src/`.
+
+The project is structured in this way so that non-oracle nodes only have to run the non-oracle flows and the web API, 
+while oracle nodes only have to run the oracle flows and services.
 
 # Pre-requisites:
   
-* JDK 1.8 minimum version (1.8.131)
-* IntelliJ minimum version (2017.1) 
-* git
+See https://docs.corda.net/getting-set-up.html.
 
 # Usage
 
 ## Running the nodes:
 
-* Ensure Oracle JDK 1.8 is installed.
-* `cd` to the directory where you want to clone this repo
-* `git clone http://github.com/roger3cev/iou-cordapp-v2`
-* `cd iou-cordapp-v2`
-* `./gradlew deployNodes`
-* `cd build/nodes`
-* `./runnodes`
+See https://docs.corda.net/tutorial-cordapp.html#running-the-example-cordapp.
 
-## Using the CorDapp:
+## Interacting with the nodes:
 
-Via the web: 
+You should interact with this CorDapp using the web front-end. Each node exposes this front-end on a different address:
 
-Navigate to http://localhost:PORT/web/iou to use the web interface where PORT typically starts at 10007 for NodeA, 
-double check the node terminal window or the build.gradle file for port numbers.
+* Issuer: `localhost:10007/web/option`
+* PartyA: `localhost:10010/web/option`
+* PartyB: `localhost:10013/web/option`
 
-Via the node shell from any node which is not the **Controller**: 
+When using the front-end:
+
+1. Start by issuing yourself some cash using the `Issue cash` button (the sky's the limit - about 1,000 should do)
+2. Request the issuance of an option from another node using the `Issue option` button
+3. Hit the refresh button (either the one on the web UI or your browser's) and you should see a list of your options 
+   and remaining cash
+4. You can now choose to:
+    * Trade the option with another node for cash, by clicking the `Exercise` button next to the option. The option 
+      will disappear (assuming the other node already has enough cash to pay for it!). If you visit the front-end of 
+      the node that you traded the option with, you will now see it listed there
+    * Exercise the option. This will lock in the exercise date, allowing you to redeem it with the issuer at a later 
+      date (this functionality is not implemented yet, but would only require an additional flow and piece of contract 
+      logic)
+
+# To-Do
+
+* Exercised options cannot yet be redeemed for cash from the issuer
+* Only five stocks are supported, and the exercise date is hardcoded
+* Once exercised, the `Trade` button is still displayed next to a node's options
+* The contract tests are focused on the happy-path

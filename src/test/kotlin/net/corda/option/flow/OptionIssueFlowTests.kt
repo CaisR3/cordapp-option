@@ -21,9 +21,9 @@ import net.corda.option.base.state.OptionState
 import net.corda.option.client.flow.OptionIssueFlow
 import net.corda.option.createBadOption
 import net.corda.option.createOption
-import net.corda.option.service.flow.QueryOracleHandler
-import net.corda.option.service.flow.RequestOracleSigHandler
-import net.corda.option.service.oracle.Oracle
+import net.corda.option.oracle.flow.QueryOracleHandler
+import net.corda.option.oracle.flow.RequestOracleSigHandler
+import net.corda.option.oracle.oracle.Oracle
 import net.corda.testing.node.MockNetwork
 import net.corda.testing.node.MockNetwork.MockNode
 import net.corda.testing.setCordappPackages

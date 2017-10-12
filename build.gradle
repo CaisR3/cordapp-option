@@ -92,40 +92,39 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         webPort 10007
         cordapps = ["net.corda:corda-finance:$corda_release_version",
                     "net.corda.option:base:$version",
-                    "net.corda.option:client:$version",
-                    "net.corda.option:oracle:$version",]
+                    "net.corda.option:client:$version"]
         rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
     }
-//    node {
-//        name "O=PartyA,L=New York,C=US"
-//        advertisedServices = []
-//        p2pPort 10008
-//        rpcPort 10009
-//        webPort 10010
-//        cordapps = ["net.corda:corda-finance:$corda_release_version",
-//                    "net.corda.option:base:$version",
-//                    "net.corda.option:client:$version"]
-//        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
-//    }
-//    node {
-//        name "O=PartyB,L=Paris,C=FR"
-//        advertisedServices = []
-//        p2pPort 10011
-//        rpcPort 10012
-//        webPort 10013
-//        cordapps = ["net.corda:corda-finance:$corda_release_version",
-//                    "net.corda.option:base:$version",
-//                    "net.corda.option:client:$version"]
-//        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
-//    }
-//    node {
-//        name "O=Oracle,L=New York,C=US"
-//        advertisedServices = ["net.corda.option.stocks_oracle"]
-//        p2pPort 10014
-//        rpcPort 10015
-//        cordapps = ["net.corda:corda-finance:$corda_release_version",
-//                    "net.corda.option:base:$version",
-//                    "net.corda.option:oracle:$version"]
-//        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
-//    }
+    node {
+        name "O=PartyA,L=New York,C=US"
+        advertisedServices = []
+        p2pPort 10008
+        rpcPort 10009
+        webPort 10010
+        cordapps = ["net.corda:corda-finance:$corda_release_version",
+                    "net.corda.option:base:$version",
+                    "net.corda.option:client:$version"]
+        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
+    }
+    node {
+        name "O=PartyB,L=Paris,C=FR"
+        advertisedServices = []
+        p2pPort 10011
+        rpcPort 10012
+        webPort 10013
+        cordapps = ["net.corda:corda-finance:$corda_release_version",
+                    "net.corda.option:base:$version",
+                    "net.corda.option:client:$version"]
+        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
+    }
+    node {
+        name "O=Oracle,L=New York,C=US"
+        advertisedServices = ["net.corda.option.stocks_oracle"]
+        p2pPort 10014
+        rpcPort 10015
+        cordapps = ["net.corda:corda-finance:$corda_release_version",
+                    "net.corda.option:base:$version",
+                    "net.corda.option:oracle:$version"]
+        rpcUsers = [[user: "user1", "password": "test", "permissions": []]]
+    }
 }

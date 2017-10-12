@@ -9,7 +9,7 @@ import net.corda.option.base.*
 import net.corda.option.base.contract.OptionContract
 import net.corda.option.base.contract.OptionContract.Companion.OPTION_CONTRACT_ID
 import net.corda.option.base.state.OptionState
-import net.corda.option.service.oracle.Oracle
+import net.corda.option.oracle.oracle.Oracle
 import net.corda.testing.*
 import net.corda.testing.node.MockServices
 import org.junit.Test
