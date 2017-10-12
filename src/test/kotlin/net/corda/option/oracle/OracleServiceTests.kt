@@ -5,11 +5,11 @@ import net.corda.core.contracts.StateAndContract
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.days
 import net.corda.finance.DOLLARS
-import net.corda.option.*
-import net.corda.option.contract.OptionContract
-import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
-import net.corda.option.service.Oracle
-import net.corda.option.state.OptionState
+import net.corda.option.base.*
+import net.corda.option.base.contract.OptionContract
+import net.corda.option.base.contract.OptionContract.Companion.OPTION_CONTRACT_ID
+import net.corda.option.base.state.OptionState
+import net.corda.option.service.oracle.Oracle
 import net.corda.testing.*
 import net.corda.testing.node.MockServices
 import org.junit.Test

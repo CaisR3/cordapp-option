@@ -1,5 +1,6 @@
 package net.corda.option.pricingmodel
 
+import net.corda.option.base.pricingmodel.BlackScholes
 import org.junit.Test
 import kotlin.test.assertEquals
 

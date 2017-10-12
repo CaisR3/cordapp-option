@@ -3,7 +3,10 @@ package net.corda.option
 import net.corda.core.contracts.Amount
 import net.corda.core.identity.Party
 import net.corda.core.utilities.days
-import net.corda.option.state.OptionState
+import net.corda.option.base.COMPANY_STOCK_1
+import net.corda.option.base.OPTION_CURRENCY
+import net.corda.option.base.OptionType
+import net.corda.option.base.state.OptionState
 import java.time.Instant
 
 fun createOption(issuer: Party, owner: Party) = OptionState(

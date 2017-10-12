@@ -9,13 +9,19 @@ import net.corda.core.utilities.getOrThrow
 import net.corda.finance.contracts.asset.Cash
 import net.corda.finance.flows.CashIssueFlow
 import net.corda.node.internal.StartedNode
-import net.corda.option.*
-import net.corda.option.contract.OptionContract
-import net.corda.option.flow.client.OptionIssueFlow
-import net.corda.option.flow.client.OptionTradeFlow
-import net.corda.option.flow.oracle.QueryOracleHandler
-import net.corda.option.flow.oracle.RequestOracleSigHandler
-import net.corda.option.state.OptionState
+import net.corda.option.DUMMY_LINEAR_ID
+import net.corda.option.base.KNOWN_SPOTS
+import net.corda.option.base.KNOWN_VOLATILITIES
+import net.corda.option.base.OPTION_CURRENCY
+import net.corda.option.base.ORACLE_NAME
+import net.corda.option.base.contract.OptionContract
+import net.corda.option.base.state.OptionState
+import net.corda.option.client.flow.OptionIssueFlow
+import net.corda.option.client.flow.OptionTradeFlow
+import net.corda.option.createOption
+import net.corda.option.service.flow.QueryOracleHandler
+import net.corda.option.service.flow.RequestOracleSigHandler
+import net.corda.option.service.oracle.Oracle
 import net.corda.testing.node.MockNetwork
 import net.corda.testing.node.MockNetwork.MockNode
 import net.corda.testing.setCordappPackages
@@ -40,7 +46,7 @@ class OptionTradeFlowTests {
 
     @Before
     fun setup() {
-        setCordappPackages("net.corda.option.contract", "net.corda.finance.contracts.asset")
+        setCordappPackages("net.corda.option.base.contract", "net.corda.finance.contracts.asset")
 
         mockNet = MockNetwork()
 
@@ -50,7 +56,7 @@ class OptionTradeFlowTests {
         buyerBNode = nodes.partyNodes[2]
         oracleNode = mockNet.createNode(nodes.mapNode.network.myAddress, legalName = ORACLE_NAME)
 
-        oracleNode.internals.installCordaService(net.corda.option.service.Oracle::class.java)
+        oracleNode.internals.installCordaService(Oracle::class.java)
         oracleNode.registerInitiatedFlow(QueryOracleHandler::class.java)
         oracleNode.registerInitiatedFlow(RequestOracleSigHandler::class.java)
 

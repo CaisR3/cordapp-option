@@ -2,11 +2,12 @@ package net.corda.option.contract
 
 import net.corda.finance.DOLLARS
 import net.corda.finance.contracts.asset.*
-import net.corda.option.KNOWN_SPOTS
-import net.corda.option.KNOWN_VOLATILITIES
-import net.corda.option.contract.OptionContract.Companion.OPTION_CONTRACT_ID
+import net.corda.option.base.KNOWN_SPOTS
+import net.corda.option.base.KNOWN_VOLATILITIES
+import net.corda.option.base.contract.OptionContract
+import net.corda.option.base.contract.OptionContract.Companion.OPTION_CONTRACT_ID
+import net.corda.option.base.state.OptionState
 import net.corda.option.createOption
-import net.corda.option.state.OptionState
 import net.corda.testing.*
 import org.junit.After
 import org.junit.Before
@@ -18,7 +19,7 @@ class OptionContractTests {
 
     @Before
     fun setup() {
-        setCordappPackages("net.corda.finance.contracts.asset", "net.corda.option.contract")
+        setCordappPackages("net.corda.option.base.contract", "net.corda.finance.contracts.asset")
     }
 
     @After

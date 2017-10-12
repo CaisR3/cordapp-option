@@ -25,7 +25,7 @@ import net.corda.testing.driver.driver
 fun main(args: Array<String>) {
     driver(
             startNodesInProcess = true,
-            extraCordappPackagesToScan = listOf("net.corda.finance.contracts.asset"),
+            extraCordappPackagesToScan = listOf("net.corda.option.base", "net.corda.option.client", "net.corda.option.service", "net.corda.finance.contracts.asset"),
             dsl = {
                 val user = User("user1", "test", permissions = setOf())
 
