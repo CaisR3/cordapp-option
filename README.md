@@ -40,8 +40,9 @@ You should interact with this CorDapp using the web front-end. Each node exposes
 When using the front-end:
 
 1. Start by issuing yourself some cash using the `Issue cash` button (the sky's the limit - about 1,000 should do)
-2. Request the issuance of an option from another node using the `Issue option` button
-3. Hit the refresh button (either the one on the web UI or your browser's) and you should see a list of your options 
+2. Request the issuance of an option from another node using the `Request option` button
+    * The issuing option will sell you the option requested at it's fair value calculated using Black-Scholes
+3. Hit the refresh button (either the one on the web UI or your browser's) and you should see a list of your options
    and remaining cash
 4. You can now choose to:
     * Trade the option with another node for cash, by clicking the `Exercise` button next to the option. The option 

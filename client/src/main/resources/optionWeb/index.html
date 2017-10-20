@@ -27,8 +27,8 @@
         <div class="navbar-header">
             <a class="navbar-brand" href="#">{{demoApp.thisNode}}</a>
         </div>
-        <button ng-click="demoApp.openCreateOptionModal()" type="button" class="btn btn-primary navbar-btn">Issue
-            option
+        <button ng-click="demoApp.openCreateOptionModal()" type="button" class="btn btn-primary navbar-btn">Request
+            Option
         </button>
         <button ng-click="demoApp.openIssueCashModal()" type="button" class="btn btn-primary navbar-btn">Self-issue cash
         </button>
@@ -39,7 +39,7 @@
 
 <script type="text/ng-template" id="createOptionModal.html">
     <div class="modal-header">
-        <h4 class="modal-title">Issue new option</h4>
+        <h4 class="modal-title">Request new option</h4>
     </div>
     <form>
         <div class="modal-body">
@@ -89,7 +89,7 @@
 
         <div class="modal-footer">
             <button ng-click="createOptionModal.cancel()" type="button" class="btn btn-default">Close</button>
-            <button ng-click="createOptionModal.create()" type="button" class="btn btn-primary">Issue option</button>
+            <button ng-click="createOptionModal.create()" type="button" class="btn btn-primary">Request option</button>
         </div>
     </form>
 </script>
@@ -222,7 +222,7 @@
             <div class="panel-heading">
                 <h3 class="panel-title">There are no recorded options</h3>
             </div>
-            <div class="panel-body">Use the "Issue option" button to issue an option to a peer.</div>
+            <div class="panel-body">Use the "Request option" button to request an option from the issuer.</div>
         </div>
         <div ng-show="demoApp.options.length" class="panel panel-primary">
             <div class="panel-heading">
