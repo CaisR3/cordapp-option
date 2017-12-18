@@ -12,15 +12,18 @@ import net.corda.option.base.state.OptionState
 import net.corda.option.oracle.oracle.Oracle
 import net.corda.testing.*
 import net.corda.testing.node.MockServices
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
+import java.security.PublicKey
 import java.util.function.Predicate
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class OracleServiceTests : TestDependencyInjectionBase() {
-    private val dummyServices = MockServices(listOf("net.corda.option.contract"), CHARLIE_KEY)
-    private val oracle = Oracle(dummyServices)
-    private val oracleKey = oracle.services.myInfo.legalIdentities.first().owningKey
+    private lateinit var dummyServices: MockServices
+    private lateinit var oracle: Oracle
+    private lateinit var oracleKey: PublicKey
 
     private val option = OptionState(
             strikePrice = 10.DOLLARS,
@@ -30,6 +33,20 @@ class OracleServiceTests : TestDependencyInjectionBase() {
             owner = MEGA_CORP,
             optionType = OptionType.PUT
     )
+
+    @Before
+    fun setup() {
+        setCordappPackages("net.corda.option.base.contract", "net.corda.finance.contracts.asset")
+
+        dummyServices = MockServices(listOf("net.corda.option.contract"), CHARLIE_KEY)
+        oracle = Oracle(dummyServices)
+        oracleKey = oracle.services.myInfo.legalIdentities.first().owningKey
+    }
+
+    @After
+    fun tearDown() {
+        unsetCordappPackages()
+    }
 
     @Test
     fun `successful spot query`() {
