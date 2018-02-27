@@ -3,9 +3,9 @@ package net.corda.option
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.utilities.getOrThrow
 import net.corda.node.services.transactions.SimpleNotaryService
-import net.corda.nodeapi.User
-import net.corda.nodeapi.internal.ServiceInfo
+import net.corda.testing.driver.DriverParameters
 import net.corda.testing.driver.driver
+import net.corda.testing.node.User
 
 /**
  * This file is exclusively for being able to run your nodes through an IDE (as opposed to running deployNodes via
@@ -23,26 +23,23 @@ import net.corda.testing.driver.driver
  * 5. Run the "Debug CorDapp" remote debug run configuration.
  */
 fun main(args: Array<String>) {
-    driver(
+    driver(DriverParameters(
             isDebug = true,
             extraCordappPackagesToScan = listOf("net.corda.finance.contracts.asset"),
+            waitForAllNodesToFinish = true),
             dsl = {
-                val user = User("user1", "test", permissions = setOf())
+                val user = User("user1", "test", permissions = setOf("ALL"))
 
-                val (controller, issuer, partyA, partyB, oracle) = listOf(
-                        startNode(providedName = CordaX500Name("Controller", "London", "GB"), advertisedServices = setOf(ServiceInfo(SimpleNotaryService.type))),
+                val (issuer, partyA, partyB, oracle) = listOf(
                         startNode(providedName = CordaX500Name("Issuer", "London", "GB"), rpcUsers = listOf(user)),
                         startNode(providedName = CordaX500Name("PartyA", "New York", "US"), rpcUsers = listOf(user)),
                         startNode(providedName = CordaX500Name("PartyB", "Paris", "FR"), rpcUsers = listOf(user)),
                         startNode(providedName = CordaX500Name("Oracle", "New York", "US"), rpcUsers = listOf(user))
                 ).map { it.getOrThrow() }
 
-                startWebserver(controller)
                 startWebserver(issuer)
                 startWebserver(partyA)
                 startWebserver(partyB)
                 startWebserver(oracle)
-
-                waitForAllNodesToFinish()
             })
 }
