@@ -82,7 +82,9 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         advertisedServices = ["corda.notary.simple"]
         p2pPort 10002
         rpcPort 10003
-        cordapps = ["net.corda:corda-finance:$corda_release_version"]
+        cordapps = ["net.corda:corda-finance:$corda_release_version",
+                    "net.corda.option:base:$version",
+                    "net.corda.option:client:$version"]
     }
     node {
         name "O=Issuer,L=London,C=GB"
