@@ -20,7 +20,6 @@ import net.corda.option.createOption
 import net.corda.option.oracle.flow.QueryOracleHandler
 import net.corda.option.oracle.flow.RequestOracleSigHandler
 import net.corda.testing.node.MockNetwork
-import net.corda.testing.node.startFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -137,7 +136,7 @@ class OptionTradeFlowTests {
         issueOptionToBuyerA(option)
         val flow = OptionTradeFlow.Initiator(DUMMY_LINEAR_ID, buyerB)
         // We are running the flow from the issuer, who doesn't currently own the option.
-        val future = issuerNode.services.startFlow(flow)
+        val future = issuerNode.startFlow(flow)
         mockNet.runNetwork()
         assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
@@ -145,7 +144,7 @@ class OptionTradeFlowTests {
     private fun issueCashToBuyerA() {
         val notary = buyerANode.services.networkMapCache.notaryIdentities.first()
         val flow = CashIssueFlow(Amount(900, OPTION_CURRENCY), OpaqueBytes.of(0x01), notary)
-        val future = buyerANode.services.startFlow(flow)
+        val future = buyerANode.startFlow(flow)
         mockNet.runNetwork()
         future.getOrThrow()
     }
@@ -153,21 +152,21 @@ class OptionTradeFlowTests {
     private fun issueCashToBuyerB() {
         val notary = buyerBNode.services.networkMapCache.notaryIdentities.first()
         val flow = CashIssueFlow(Amount(900, OPTION_CURRENCY), OpaqueBytes.of(0x01), notary)
-        val future = buyerBNode.services.startFlow(flow)
+        val future = buyerBNode.startFlow(flow)
         mockNet.runNetwork()
         future.getOrThrow()
     }
 
     private fun issueOptionToBuyerA(option: OptionState): SignedTransaction {
         val flow = OptionIssueFlow.Initiator(option)
-        val future = buyerANode.services.startFlow(flow)
+        val future = buyerANode.startFlow(flow)
         mockNet.runNetwork()
         return future.getOrThrow()
     }
 
     private fun tradeOptionWithBuyerB(): SignedTransaction {
         val flow = OptionTradeFlow.Initiator(DUMMY_LINEAR_ID, buyerB)
-        val future = buyerANode.services.startFlow(flow)
+        val future = buyerANode.startFlow(flow)
         mockNet.runNetwork()
         return future.getOrThrow()
     }

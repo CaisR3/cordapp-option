@@ -13,7 +13,7 @@ import net.corda.option.base.contract.OptionContract.Companion.OPTION_CONTRACT_I
 import net.corda.option.base.state.OptionState
 import net.corda.option.oracle.oracle.Oracle
 import net.corda.testing.core.SerializationEnvironmentRule
-import net.corda.testing.core.TEST_TX_TIME
+import net.corda.testing.internal.TEST_TX_TIME
 import net.corda.testing.node.MockServices
 import org.junit.Rule
 import org.junit.Test

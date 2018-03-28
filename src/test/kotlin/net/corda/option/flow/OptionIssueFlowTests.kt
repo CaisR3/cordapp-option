@@ -21,7 +21,6 @@ import net.corda.option.createOption
 import net.corda.option.oracle.flow.QueryOracleHandler
 import net.corda.option.oracle.flow.RequestOracleSigHandler
 import net.corda.testing.node.MockNetwork
-import net.corda.testing.node.startFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -135,7 +134,7 @@ class OptionIssueFlowTests {
         issueCashToBuyer()
         val option = createOption(issuer, buyer)
         val flow = OptionIssueFlow.Initiator(option)
-        val future = issuerNode.services.startFlow(flow)
+        val future = issuerNode.startFlow(flow)
         mockNet.runNetwork()
         assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
@@ -144,7 +143,7 @@ class OptionIssueFlowTests {
     fun `issue flow rejects options with an expiry date in the past`() {
         issueCashToBuyer()
         val badOption = createBadOption(issuer, buyer)
-        val futureOne = buyerNode.services.startFlow(OptionIssueFlow.Initiator(badOption))
+        val futureOne = buyerNode.startFlow(OptionIssueFlow.Initiator(badOption))
         mockNet.runNetwork()
         assertFailsWith<TransactionVerificationException> { futureOne.getOrThrow() }
     }
@@ -153,7 +152,7 @@ class OptionIssueFlowTests {
     fun `issue flow fails if the buyer does not have enough cash`() {
         val option = createOption(issuer, buyer)
         val flow = OptionIssueFlow.Initiator(option)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         assertFailsWith<InsufficientBalanceException> { future.getOrThrow() }
     }
@@ -161,14 +160,14 @@ class OptionIssueFlowTests {
     private fun issueCashToBuyer() {
         val notary = buyerNode.services.networkMapCache.notaryIdentities.first()
         val flow = CashIssueFlow(Amount(900, OPTION_CURRENCY), OpaqueBytes.of(0x01), notary)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         future.getOrThrow()
     }
 
     private fun issueOptionToBuyer(option: OptionState): SignedTransaction {
         val flow = OptionIssueFlow.Initiator(option)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         return future.getOrThrow()
     }

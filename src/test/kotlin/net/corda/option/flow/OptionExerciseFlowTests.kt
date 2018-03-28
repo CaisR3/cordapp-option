@@ -18,7 +18,6 @@ import net.corda.option.createOption
 import net.corda.option.oracle.flow.QueryOracleHandler
 import net.corda.option.oracle.flow.RequestOracleSigHandler
 import net.corda.testing.node.MockNetwork
-import net.corda.testing.node.startFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -107,7 +106,7 @@ class OptionExerciseFlowTests {
         issueOptionToBuyer(option)
         val flow = OptionExerciseFlow.Initiator(DUMMY_LINEAR_ID)
         // We are running the flow from the issuer, who doesn't currently own the option.
-        val future = issuerNode.services.startFlow(flow)
+        val future = issuerNode.startFlow(flow)
         mockNet.runNetwork()
         assertFailsWith<IllegalArgumentException> { future.getOrThrow() }
     }
@@ -115,21 +114,21 @@ class OptionExerciseFlowTests {
     private fun issueCashToBuyer() {
         val notary = buyerNode.services.networkMapCache.notaryIdentities.first()
         val flow = CashIssueFlow(Amount(900, OPTION_CURRENCY), OpaqueBytes.of(0x01), notary)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         future.getOrThrow()
     }
 
     private fun issueOptionToBuyer(option: OptionState): SignedTransaction {
         val flow = OptionIssueFlow.Initiator(option)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         return future.getOrThrow()
     }
 
     private fun exerciseOption(): SignedTransaction {
         val flow = OptionExerciseFlow.Initiator(DUMMY_LINEAR_ID)
-        val future = buyerNode.services.startFlow(flow)
+        val future = buyerNode.startFlow(flow)
         mockNet.runNetwork()
         return future.getOrThrow()
     }
