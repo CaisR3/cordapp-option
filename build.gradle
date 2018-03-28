@@ -49,6 +49,23 @@ sourceSets {
             srcDir "config/test"
         }
     }
+    scenario {
+        kotlin {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+            srcDir file('src/system-test/scenario/kotlin')
+        }
+        resources {
+            srcDir 'src/system-test/scenario/resources'
+        }
+    }
+}
+
+configurations {
+    runtime.exclude group: 'org.jolokia'
+
+    scenarioCompile.extendsFrom testCompile
+    scenarioRuntime.extendsFrom testRuntime
 }
 
 dependencies {
@@ -71,6 +88,10 @@ dependencies {
     cordapp project(":base")
     cordapp project(":client")
     cordapp project(":oracle")
+
+    // Scenarios / End-to-End Tests
+//    testCompile "${corda_release_group}.behave:behave-scenario-api:${corda_release_version}"
+    testCompile "${corda_release_group}.behave:behave-scenario-api:corda-4.0-snapshot"
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -142,4 +163,9 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
                     "net.corda.option:oracle:$version"]
         rpcUsers = [[user: "user1", "password": "test", "permissions": ["ALL"]]]
     }
+}
+
+task scenarioJar(type: Jar, dependsOn: classes) {
+    archiveName "cordapp-option-behave-test.jar"
+    from sourceSets.scenario.output
 }
