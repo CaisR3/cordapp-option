@@ -3,7 +3,7 @@ Feature: Compatibility testing of Options CorDapp (https://github.com/CaisR3/cor
   To support an interoperable Corda network, different CorDapps must have the ability to transact in mixed Corda (OS) and R3 Corda (Enterprise) networks.
 
   Scenario Outline: Corda (OS) Node can transact with R3 Corda (Enterprise) node using the Options sample application.
-    Given a validating notary Controller of version <Corda-Node-Version>
+    Given a validating notary Notary of version <Corda-Node-Version>
     And a node Issuer of version <Corda-Node-Version>
     And node Issuer has app installed: <Cordapp-Name>
     And a node PartyA of version <Corda-Node-Version> with proxy
