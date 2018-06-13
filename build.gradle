@@ -108,8 +108,7 @@ dependencies {
     cordapp project(":oracle")
 
     // Scenarios / End-to-End Tests
-//    testCompile "${corda_release_group}.behave:behave-scenario-api:${corda_release_version}"
-//    testCompile "net.corda.behave:corda-behave-api:corda-4.0-snapshot"
+    testCompile "net.corda.behave:corda-behave-api:3.0.0-SNAPSHOT"
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -188,19 +187,3 @@ task scenarioJar(type: Jar, dependsOn: classes) {
     from sourceSets.scenario.output
 }
 
-//group 'net.corda.examples'
-//
-//task apiJar(type: Jar, dependsOn: classes) {
-//    from sourceSets.scenario.output
-////    from "$corda_release_group:corda-finance:$corda_release_version"
-////            .configurations.compile.collect { zipTree it }
-//}
-//
-//publishing {
-//    publications {
-//        api(MavenPublication) {
-//            artifactId 'cordapp-option'
-//            artifact apiJar
-//        }
-//    }
-//}
