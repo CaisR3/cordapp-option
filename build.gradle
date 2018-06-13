@@ -1,17 +1,27 @@
 version = "0.3"
 
 buildscript {
-    ext.corda_release_group = 'net.corda'
-    ext.corda_release_version = 'corda-3.0'
-    ext.corda_gradle_plugins_version = '3.0.8'
-    ext.kotlin_version = '1.2.20'
+    ext.corda_release_group = 'com.r3.corda'
+    ext.corda_release_version = '3.0.0-RC03'
+    ext.kotlin_version = '1.2.41'
     ext.junit_version = '4.12'
-    ext.quasar_version = '0.7.9'
+    ext.corda_gradle_plugins_version = '4.0.22'
+    ext.quasar_group = 'com.github.corda.quasar'
+    ext.quasar_version = '7629695563deae6cc95adcfbebcbc8322fd0241a'
 
     repositories {
         mavenLocal()
         mavenCentral()
         jcenter()
+        maven { url 'https://ci-artifactory.corda.r3cev.com/artifactory/corda-releases' }
+        maven {
+            credentials {
+                username = "qa-test"
+                password = "TestItNowOrNever"
+            }
+            url 'https://ci-artifactory.corda.r3cev.com/artifactory/r3-corda-releases/'
+        }
+
     }
 
     dependencies {
@@ -28,6 +38,13 @@ repositories {
     mavenCentral()
     maven { url 'https://jitpack.io' }
     maven { url 'https://ci-artifactory.corda.r3cev.com/artifactory/corda-releases' }
+    maven {
+        credentials {
+            username = "qa-test"
+            password = "TestItNowOrNever"
+        }
+        url 'https://ci-artifactory.corda.r3cev.com/artifactory/r3-corda-releases/'
+    }
 }
 
 apply plugin: 'kotlin'
@@ -53,6 +70,7 @@ sourceSets {
         kotlin {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
+            srcDir file('client/src/main/kotlin')
             srcDir file('src/system-test/scenario/kotlin')
         }
         resources {
@@ -91,7 +109,7 @@ dependencies {
 
     // Scenarios / End-to-End Tests
 //    testCompile "${corda_release_group}.behave:behave-scenario-api:${corda_release_version}"
-    testCompile "${corda_release_group}.behave:behave-scenario-api:corda-4.0-snapshot"
+//    testCompile "net.corda.behave:corda-behave-api:corda-4.0-snapshot"
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -169,3 +187,20 @@ task scenarioJar(type: Jar, dependsOn: classes) {
     archiveName "cordapp-option-behave-test.jar"
     from sourceSets.scenario.output
 }
+
+//group 'net.corda.examples'
+//
+//task apiJar(type: Jar, dependsOn: classes) {
+//    from sourceSets.scenario.output
+////    from "$corda_release_group:corda-finance:$corda_release_version"
+////            .configurations.compile.collect { zipTree it }
+//}
+//
+//publishing {
+//    publications {
+//        api(MavenPublication) {
+//            artifactId 'cordapp-option'
+//            artifact apiJar
+//        }
+//    }
+//}
